@@ -19,6 +19,14 @@
 
 **重要目录：** 仓库内 Compose 与 Caddy 配置在 **`zero/`** 下。下文默认你已 `cd` 到 **`zero`**（与 `docker-compose.yml` 同级）。
 
+**当前栈（与旧版 Go/React 不同）：**
+
+| 组件 | 说明 |
+|------|------|
+| 后端 | **Spring Boot 3**，容器内 `APP_PORT=8080`，SQLite 文件在卷 **`zero_data`**（`/data/zero.db`）。启动时 Flyway 自动迁移。 |
+| 前端 | **Vue 3 + Vite**，须在部署前构建 **`frontend-vue/dist`**；`docker-compose` 将该目录只读挂载到 Caddy 的 `/srv/frontend`。 |
+| 入口 | Caddy：`/api/*` → `backend:8080`；其余路径为静态 SPA。 |
+
 ---
 
 ## 0. 你需要先具备什么
@@ -65,7 +73,7 @@ sudo usermod -aG docker "$USER"
 
 ## 2. 安装 Node.js（Ubuntu，用于构建前端）
 
-在服务器上构建 `frontend/dist` 需要 **Node 20+**（本项目使用 **Node 22** 与 [NodeSource](https://github.com/nodesource/distributions)）：
+在服务器上构建 `frontend-vue/dist` 需要 **Node 20+**（本项目使用 **Node 22** 与 [NodeSource](https://github.com/nodesource/distributions)）：
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -76,7 +84,7 @@ npm -v
 
 缺少 `curl` 时：`sudo apt-get install -y curl`。
 
-**不在服务器上装 Node 的替代做法：** 在你本机执行 `npm ci && npm run build`，将 **`frontend/dist`** 上传到服务器的 `zero/frontend/dist`，然后只执行 `docker compose up`（服务器仅需 Docker）。
+**不在服务器上装 Node 的替代做法：** 在你本机于 `frontend-vue` 下执行 `npm ci && npm run build`，将 **`frontend-vue/dist`** 上传到服务器的 `zero/frontend-vue/dist`，然后只执行 `docker compose up`（服务器仅需 Docker）。
 
 ---
 
@@ -109,7 +117,7 @@ cd 你的仓库名
 ```bash
 cd zero
 pwd
-# 应能看到 docker-compose.yml、Caddyfile、backend/、frontend/
+# 应能看到 docker-compose.yml、Caddyfile、backend/、frontend-vue/
 ```
 
 以后更新：
@@ -173,13 +181,13 @@ chmod 600 .env
 
 ```bash
 cd /opt/你的仓库名/zero
-cd frontend
+cd frontend-vue
 npm ci
 npm run build
 cd ..
 ```
 
-确认存在 **`frontend/dist/`**（含 `index.html`）。
+确认存在 **`frontend-vue/dist/`**（含 `index.html`）。Caddy 挂载该目录为静态站点根（见 `docker-compose.yml`）。
 
 ---
 
@@ -191,7 +199,7 @@ cd ..
 
 ## 9. 启动服务
 
-**必须先有 `frontend/dist/`（含 `index.html`）。** 该目录**不会**随 `git clone` / `git pull` 出现（前端构建产物在 `.gitignore` 里）。若跳过 §7 直接起容器，浏览器往往**白屏、空白或 404**。
+**必须先有 `frontend-vue/dist/`（含 `index.html`）。** 该目录**不会**随 `git clone` / `git pull` 出现（前端构建产物在 `.gitignore` 里）。若跳过 §7 直接起容器，浏览器往往**白屏、空白或 404**。
 
 ```bash
 cd /opt/你的仓库名/zero
@@ -217,7 +225,7 @@ docker compose logs -f --tail=100
 ssh user@服务器IP
 cd /opt/你的仓库名/zero
 git pull
-cd frontend && npm ci && npm run build && cd ..
+cd frontend-vue && npm ci && npm run build && cd ..
 docker compose up -d --build
 ```
 
@@ -235,7 +243,7 @@ docker compose up -d --build
 
 | 现象 | 排查 |
 |------|------|
-| **打不开 / 白屏 / 一直转圈** | **先看 `ls frontend/dist/index.html`**：不存在则必须先 `cd frontend && npm ci && npm run build`（或 `./scripts/deploy.sh`）。再查：`docker compose ps`；**`CADDY_SITE` / `FRONTEND_ORIGIN` 是否与浏览器地址一致**（`www` 与根域是否都写入 `CADDY_SITE`）；云安全组与本机 **ufw** 是否放行 80/443；DNS 是否指向本机 IP。在 **`zero` 目录**执行 **`./scripts/diagnose.sh`** 可快速汇总上述检查。 |
+| **打不开 / 白屏 / 一直转圈** | **先看 `ls frontend-vue/dist/index.html`**：不存在则必须先 `cd frontend-vue && npm ci && npm run build`（或 `./scripts/deploy.sh`）。再查：`docker compose ps`；**`CADDY_SITE` / `FRONTEND_ORIGIN` 是否与浏览器地址一致**（`www` 与根域是否都写入 `CADDY_SITE`）；云安全组与本机 **ufw** 是否放行 80/443；DNS 是否指向本机 IP。在 **`zero` 目录**执行 **`./scripts/diagnose.sh`** 可快速汇总上述检查。 |
 | 网页打不开 | `docker compose ps`；云安全组与本机 **ufw** 是否放行 80/443；DNS 是否指向本机 IP |
 | **感觉 Caddy「没监听到」域名 / 证书不对** | Caddy **按站点块匹配浏览器 `Host`**，不是「任意域名进来都算」。**`.env` 里 `CADDY_SITE` 必须包含你实际访问的主机名**（例如只配了根域却访问 `www`，或相反，会不匹配）。建议同时写：`CADDY_SITE=www.example.com,example.com`，且 **`FRONTEND_ORIGIN` 与地址栏一致**。核对 DNS：**域名拼写**（常见笔误 `online` 写成 `onlne`）、A 记录是否指向本机公网 IP。改 `.env` 后执行 `docker compose up -d --force-recreate`。已开启访问日志：`docker compose logs -f caddy`，请求到达时会有访问记录；**若完全无新日志**，说明流量未到本机（DNS/防火墙/端口）。 |
 | **502**，日志含 `lookup backend` / `127.0.0.11` / `server misbehaving` | **先确认后端在跑**：`docker compose ps`、`docker compose logs backend`。再在 Caddy 容器内测解析：`docker exec zero-caddy wget -qO- http://backend:8080/healthz`。若 `backend` 解析失败，在同一目录执行 `docker compose down && docker compose up -d --build`（勿单独用 `docker run` 起 Caddy）。勿在 `/etc/docker/daemon.json` 里把容器 DNS 改成仅公网 DNS，否则会破坏服务名解析。 |
@@ -262,7 +270,7 @@ JWT_REFRESH_SECRET=...
 | 目的 | 命令 |
 |------|------|
 | 构建前端 + 启动（推荐） | `./scripts/deploy.sh` |
-| 仅构建前端 | `cd frontend && npm ci && npm run build && cd ..` |
+| 仅构建前端 | `cd frontend-vue && npm ci && npm run build && cd ..` |
 | 启动/重建 | `docker compose up -d --build` |
 | 查看日志 | `docker compose logs -f` |
 | 停止 | `docker compose down` |
@@ -279,7 +287,7 @@ JWT_REFRESH_SECRET=...
 |------|------|----------|
 | **`scripts/bootstrap-ubuntu.sh`** | 仅在**全新 Ubuntu 22.04/24.04** 上**一次性**安装 Docker、Node 22、ufw（需 **root/sudo**） | `sudo bash scripts/bootstrap-ubuntu.sh` |
 | **`scripts/deploy.sh`** | 在已有 **`zero/.env`** 的前提下：**构建前端 + `docker compose up`**；可选先 `git pull` | `cd /path/to/zero && ./scripts/deploy.sh` 或 `GIT_PULL=1 ./scripts/deploy.sh` |
-| **`scripts/diagnose.sh`** | **排查「打不开 / 白屏 / 502」**：检查 `frontend/dist`、容器状态、Caddy/后端日志、caddy→backend 连通性 | `cd /path/to/zero && ./scripts/diagnose.sh` |
+| **`scripts/diagnose.sh`** | **排查「打不开 / 白屏 / 502」**：检查 `frontend-vue/dist`、容器状态、Caddy/后端日志、caddy→backend 连通性 | `cd /path/to/zero && ./scripts/diagnose.sh` |
 
 **推荐流程：**
 
@@ -335,7 +343,13 @@ NodeSource **Node 22** 需要 **glibc ≥ 2.28**，CentOS 7 **无法满足**，�
 2. **试 Node 16 RPM**（可能仍失败或无法满足前端依赖）：  
    `curl -fsSL https://rpm.nodesource.com/setup_16.x | sudo bash -` → `yum install -y nodejs`  
 3. **nvm 安装 Node 16**（用户目录）。  
-4. **本机构建**：只上传 **`frontend/dist`**，服务器只装 Docker。
+4. **本机构建**：只上传 **`frontend-vue/dist`**，服务器只装 Docker。
+
+---
+
+## 用户选项与迁移（V2）
+
+后端 Flyway **`V2__user_option_items.sql`** 会创建 `user_option_items` 表，用于每用户可配置的账户类型、归属与大事记分类。首次访问「设置」或调用相关 API 时，若该用户尚无记录，会自动写入与历史硬编码一致的默认种子。部署新版本时请正常启动后端以执行迁移；无需手工 SQL。
 
 ---
 
