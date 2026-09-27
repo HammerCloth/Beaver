@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 在 zero 目录下完成：可选 git pull → 构建前端 → docker compose up
+# 在项目根目录下完成：可选 git pull → 构建前端 → docker compose up
 # 用法: ./scripts/deploy.sh
 #       GIT_PULL=1 ./scripts/deploy.sh   # 先 git pull 再部署
 set -euo pipefail
@@ -14,7 +14,7 @@ if [[ ! -f .env ]]; then
 fi
 
 if [[ ! -d frontend-vue ]]; then
-  echo "错误：未找到 frontend-vue 目录（应在 zero 目录下执行本脚本）"
+  echo "错误：未找到 frontend-vue 目录（应在项目根目录下执行本脚本）"
   exit 1
 fi
 

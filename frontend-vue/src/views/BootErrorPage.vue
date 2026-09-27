@@ -28,7 +28,7 @@ async function retry() {
             <p class="page-header__desc">{{ auth.bootError }}</p>
             <n-text depth="3">
               请先启动 Spring Boot（默认端口 8080），再点击重试。开发时可在
-              <code>zero/backend</code> 执行：
+              <code>backend</code> 执行：
             </n-text>
             <n-code style="display: block; padding: 12px">./mvnw spring-boot:run</n-code>
             <n-text depth="3">或使用已打包的 JAR，并确保已创建 <code>backend/data</code> 目录。</n-text>

@@ -1,9 +1,9 @@
 {
-  "name": "zero",
+  "name": "beaver",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Project codename: zero",
+  "description": "Beaver — personal asset dashboard",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

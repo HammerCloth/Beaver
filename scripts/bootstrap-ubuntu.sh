@@ -44,5 +44,5 @@ ufw status
 echo ""
 echo "下一步（需用非 root 用户或自行添加 docker 组）："
 echo "  usermod -aG docker <你的用户名>"
-echo "  然后重新登录 SSH，再执行 git clone、在 zero 目录创建 .env、运行 ./scripts/deploy.sh"
+echo "  然后重新登录 SSH，再执行 git clone、在项目根目录创建 .env、运行 ./scripts/deploy.sh"
 echo "详见 docs/DEPLOYMENT.md"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BrandMark from '@/components/BrandMark.vue'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
@@ -52,7 +53,7 @@ async function submit() {
   <div class="login-shell">
     <div class="login-wrap">
       <section class="login-hero">
-        <span class="login-hero__badge">Project Zero</span>
+        <span class="login-hero__badge">Beaver · 河狸</span>
         <h1 class="login-hero__title">把资产变化、账户结构和年度事件放到同一个视角。</h1>
         <p class="login-hero__desc">
           更清楚地看净资产走势、账户构成和时间节点，桌面端和手机端都能快速进入核心数据。
@@ -75,10 +76,10 @@ async function submit() {
 
       <section class="login-card">
         <div class="login-card__brand">
-          <span class="app-brand__mark">Z</span>
+          <BrandMark :size="36" />
           <div class="login-card__brand-text">
-            <strong>Project Zero</strong>
-            <span class="section-note">Personal finance workspace</span>
+            <strong>Beaver</strong>
+            <span class="section-note">个人资产看板</span>
           </div>
         </div>
         <h2 class="login-card__title">登录</h2>

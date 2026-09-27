@@ -1,4 +1,4 @@
-# Project Zero
+# Beaver
 
 家庭资产管理应用，采用：
 
@@ -98,7 +98,7 @@ loan_repayments
 POST /mcp
 ```
 
-MCP 访问使用标准 OAuth 授权码 + PKCE 流程。AI Agent 第一次连接时会通过 discovery 找到授权入口，打开浏览器登录 Project Zero 已有账号，登录成功后 Agent 使用 authorization code 换取 access token 和 refresh token。MCP 不开放新用户注册；没有现有账号会授权失败。
+MCP 访问使用标准 OAuth 授权码 + PKCE 流程。AI Agent 第一次连接时会通过 discovery 找到授权入口，打开浏览器登录 Beaver 已有账号，登录成功后 Agent 使用 authorization code 换取 access token 和 refresh token。MCP 不开放新用户注册；没有现有账号会授权失败。
 
 相关端点：
 
@@ -174,14 +174,14 @@ nano ~/.codex/config.toml
 加入：
 
 ```toml
-[mcp_servers.project_zero]
+[mcp_servers.beaver]
 url = "https://app.example.com/mcp"
 ```
 
 然后执行 OAuth 登录：
 
 ```bash
-codex mcp login project_zero
+codex mcp login beaver
 ```
 
 也可以在 Codex TUI 中输入：
@@ -190,20 +190,20 @@ codex mcp login project_zero
 /mcp
 ```
 
-查看 MCP server 状态并触发登录。Codex 会打开浏览器，登录 Project Zero 已有账号后保存 OAuth token。官方配置说明见 [OpenAI Codex MCP docs](https://developers.openai.com/codex/mcp)。
+查看 MCP server 状态并触发登录。Codex 会打开浏览器，登录 Beaver 已有账号后保存 OAuth token。官方配置说明见 [OpenAI Codex MCP docs](https://developers.openai.com/codex/mcp)。
 
 #### Claude Code
 
 添加 HTTP MCP server：
 
 ```bash
-claude mcp add --transport http project-zero https://app.example.com/mcp
+claude mcp add --transport http beaver https://app.example.com/mcp
 ```
 
 然后执行 OAuth 登录：
 
 ```bash
-claude mcp login project-zero
+claude mcp login beaver
 ```
 
 或者进入 Claude Code 交互会话后输入：
@@ -212,10 +212,10 @@ claude mcp login project-zero
 /mcp
 ```
 
-在 MCP 面板里选择 `project-zero` 并完成浏览器登录。服务器返回 `401` 时会通过 `WWW-Authenticate` 指向 OAuth discovery，Claude Code 会按 OAuth 2.0 流程完成授权并自动刷新 token。远程 SSH 环境下可使用：
+在 MCP 面板里选择 `beaver` 并完成浏览器登录。服务器返回 `401` 时会通过 `WWW-Authenticate` 指向 OAuth discovery，Claude Code 会按 OAuth 2.0 流程完成授权并自动刷新 token。远程 SSH 环境下可使用：
 
 ```bash
-claude mcp login project-zero --no-browser
+claude mcp login beaver --no-browser
 ```
 
 它会打印授权 URL，浏览器登录后把回调 URL 粘回终端。官方说明见 [Claude Code MCP docs](https://docs.anthropic.com/en/docs/claude-code/mcp)。
@@ -228,14 +228,14 @@ claude mcp login project-zero --no-browser
 https://app.example.com/mcp
 ```
 
-在客户端 MCP 设置里新增 HTTP server，名称建议用 `project-zero`。首次调用或在 MCP 管理界面中触发认证时，客户端会打开浏览器走 OAuth 登录。不同 Claude Desktop 版本的 MCP 配置入口可能不同；如果界面没有远程 HTTP MCP 配置项，优先使用 Claude Code 的 `claude mcp add --transport http ...` 方式。
+在客户端 MCP 设置里新增 HTTP server，名称建议用 `beaver`。首次调用或在 MCP 管理界面中触发认证时，客户端会打开浏览器走 OAuth 登录。不同 Claude Desktop 版本的 MCP 配置入口可能不同；如果界面没有远程 HTTP MCP 配置项，优先使用 Claude Code 的 `claude mcp add --transport http ...` 方式。
 
 #### 验证
 
 授权成功后，可以让客户端询问：
 
 ```text
-请调用 Project Zero MCP，列出当前可用快照，并说明这个资产系统的数据模型限制。
+请调用 Beaver MCP，列出当前可用快照，并说明这个资产系统的数据模型限制。
 ```
 
 如果客户端显示未授权或没有 tools：
@@ -247,7 +247,7 @@ https://app.example.com/mcp
 
 ## 阿里云线上更新命令
 
-以下命令默认在项目根目录 `zero/` 下执行。
+以下命令默认在项目根目录下执行。
 
 ### 1. 只更新 Vue 前端
 
@@ -318,15 +318,15 @@ GitHub 不会直接跑你的阿里云机器，但可以在 push 之后 SSH 登�
 | `DEPLOY_HOST` | 服务器公网 IP 或域名 | `47.x.x.x` |
 | `DEPLOY_USER` | SSH 用户名 | `root` |
 | `DEPLOY_SSH_KEY` | 能登录该用户的 **私钥** 全文 | `-----BEGIN OPENSSH PRIVATE KEY----- ...` |
-| `DEPLOY_PATH` | 服务器上仓库根目录（有 `docker-compose.yml` 的那层） | `/opt/Zero` |
+| `DEPLOY_PATH` | 服务器上仓库根目录（有 `docker-compose.yml` 的那层） | `/opt/Beaver` |
 
 本机生成一把专用密钥（不要用你日常登录电脑的那把）：
 
 ```bash
-ssh-keygen -t ed25519 -C "github-deploy" -f ./zero-deploy -N ""
+ssh-keygen -t ed25519 -C "github-deploy" -f ./beaver-deploy -N ""
 ```
 
-把 `zero-deploy.pub` 追加到服务器 `~/.ssh/authorized_keys`，把 `zero-deploy` 私钥全文贴进 `DEPLOY_SSH_KEY`。本地这两份文件用完可以删。
+把 `beaver-deploy.pub` 追加到服务器 `~/.ssh/authorized_keys`，把 `beaver-deploy` 私钥全文贴进 `DEPLOY_SSH_KEY`。本地这两份文件用完可以删。
 
 配好后：
 

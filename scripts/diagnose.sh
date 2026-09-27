@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 在 zero 目录排查「打不开 / 白屏 / 502」——不修改系统，只打印检查结果
-# 用法: cd /path/to/zero && ./scripts/diagnose.sh
+# 在项目根目录排查「打不开 / 白屏 / 502」——不修改系统，只打印检查结果
+# 用法: cd /path/to/Beaver && ./scripts/diagnose.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,7 +32,7 @@ fi
 
 echo ""
 echo "========== 3. 容器状态 =========="
-docker compose ps 2>/dev/null || echo "（无法执行 docker compose，请在 zero 目录、有 docker 权限的机器上运行）"
+docker compose ps 2>/dev/null || echo "（无法执行 docker compose，请在项目根目录、有 docker 权限的机器上运行）"
 
 echo ""
 echo "========== 4. Caddy / 后端 最近日志 =========="
