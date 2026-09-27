@@ -2,6 +2,7 @@ package com.zero.domain;
 
 public class MajorFinancialEvent {
   private String id;
+  private String snapshotId;
   private String date;
   private String category;
   private String description;
@@ -13,6 +14,14 @@ public class MajorFinancialEvent {
 
   public void setId(String id) {
     this.id = id;
+  }
+
+  public String getSnapshotId() {
+    return snapshotId;
+  }
+
+  public void setSnapshotId(String snapshotId) {
+    this.snapshotId = snapshotId;
   }
 
   public String getDate() {

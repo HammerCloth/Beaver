@@ -108,4 +108,11 @@ public interface SnapshotMapper {
       @Param("fromDate") String fromDate,
       @Param("toDate") String toDate,
       @Param("limit") int limit);
+
+  @Select(
+      "SELECT e.id, s.id AS snapshotId, s.date AS date, e.category, e.description, e.amount "
+          + "FROM events e INNER JOIN snapshots s ON e.snapshot_id = s.id "
+          + "WHERE s.user_id = #{userId} AND substr(s.date, 1, 4) = #{year} "
+          + "ORDER BY s.date DESC, e.created_at DESC")
+  List<MajorFinancialEvent> listEventsForYear(@Param("userId") String userId, @Param("year") String year);
 }

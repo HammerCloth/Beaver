@@ -2,6 +2,7 @@ package com.zero.web;
 
 import com.zero.domain.EventCategoryCount;
 import com.zero.domain.EventCategoryStat;
+import com.zero.domain.MajorFinancialEvent;
 import com.zero.mapper.SnapshotMapper;
 import com.zero.support.CurrentUser;
 import java.time.LocalDate;
@@ -40,5 +41,14 @@ public class EventController {
       countByCategory.put(c.getCategory(), c.getCnt());
     }
     return Map.of("year", y, "byCategory", byCategory, "grandTotal", grand, "countByCategory", countByCategory);
+  }
+
+  /** 指定年份的全部大事记明细（含收入与支出），按快照日期倒序 */
+  @GetMapping
+  public Map<String, Object> list(@RequestParam(value = "year", required = false) Integer year) {
+    String uid = CurrentUser.require().userId();
+    int y = year != null ? year : LocalDate.now().getYear();
+    List<MajorFinancialEvent> events = snapshotMapper.listEventsForYear(uid, String.valueOf(y));
+    return Map.of("year", y, "events", events);
   }
 }
