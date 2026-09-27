@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import type { MenuOption } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
+import { navIcons } from '@/components/navIcons'
+import BrandMark from '@/components/BrandMark.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -39,22 +41,29 @@ watch(
   { immediate: true },
 )
 
+function item(label: string, key: string): MenuOption {
+  return { label, key, icon: navIcons[key] }
+}
+
 const menuOptions = computed<MenuOption[]>(() => {
-  const base: MenuOption[] = [
-    { label: '总览', key: '/dashboard' },
-    { label: '快照', key: '/snapshots' },
-    { label: '账户', key: '/accounts' },
-    { label: '大事记', key: '/events' },
-    { label: '礼金', key: '/gifts' },
-    { label: '借款', key: '/loans' },
-    { label: 'AI 客户端', key: '/ai-clients' },
-    { label: '设置', key: '/settings' },
-  ]
+  const system: MenuOption[] = [item('AI 客户端', '/ai-clients'), item('设置', '/settings')]
   if (auth.isAdmin) {
-    base.push({ label: '用户管理', key: '/users' })
+    system.push(item('用户管理', '/users'))
   }
-  return base
+  return [
+    { type: 'group', label: '资产', key: 'g-assets', children: [item('总览', '/dashboard'), item('快照', '/snapshots'), item('账户', '/accounts')] },
+    { type: 'group', label: '记录', key: 'g-records', children: [item('大事记', '/events'), item('礼金', '/gifts'), item('借款', '/loans')] },
+    { type: 'group', label: '系统', key: 'g-system', children: system },
+  ]
 })
+
+const userMenuOptions = [{ label: '退出登录', key: 'logout' }]
+
+function onUserMenu(key: string) {
+  if (key === 'logout') {
+    onLogout()
+  }
+}
 
 const activeKey = computed(() => {
   const p = route.path
@@ -79,13 +88,13 @@ const activeKey = computed(() => {
 const pageTitle = computed(() => {
   switch (activeKey.value) {
     case '/dashboard':
-      return '资产总览'
+      return '总览'
     case '/snapshots':
-      return '快照与时间线'
+      return '快照'
     case '/accounts':
-      return '账户管理'
+      return '账户'
     case '/events':
-      return '年度支出观察'
+      return '大事记'
     case '/gifts':
       return '礼金'
     case '/loans':
@@ -93,15 +102,22 @@ const pageTitle = computed(() => {
     case '/ai-clients':
       return 'AI 客户端'
     case '/settings':
-      return '系统设置'
+      return '设置'
     case '/users':
-      return '用户与权限'
+      return '用户管理'
     default:
-      return 'Project Zero'
+      return 'Beaver'
   }
 })
 
-const pageEyeline = computed(() => (mobile.value ? 'Zero' : 'Project Zero Workspace'))
+watch(
+  pageTitle,
+  (title) => {
+    document.title = title === 'Beaver' ? title : `${title} · Beaver`
+  },
+  { immediate: true },
+)
+
 const userInitial = computed(() => (auth.user?.username?.slice(0, 1) || 'Z').toUpperCase())
 
 function onMenuSelect(key: string) {
@@ -121,67 +137,74 @@ async function onLogout() {
       v-if="!mobile"
       bordered
       collapse-mode="width"
-      :collapsed="collapsed"
+      v-model:collapsed="collapsed"
       :collapsed-width="64"
-      :width="220"
-      show-trigger
-      @collapse="collapsed = true"
-      @expand="collapsed = false"
+      :width="232"
+      show-trigger="bar"
     >
-      <div class="app-sidebar">
+      <div class="app-sidebar" :class="{ 'is-collapsed': collapsed }">
         <div class="app-brand">
-          <span class="app-brand__mark">Z</span>
+          <BrandMark />
           <div v-if="!collapsed" class="app-brand__text">
-            <span class="app-brand__title">Project Zero</span>
-            <span class="app-brand__subtitle">Personal finance cockpit</span>
+            <span class="app-brand__title">Beaver</span>
+            <span class="app-brand__subtitle">个人资产看板</span>
           </div>
         </div>
         <n-menu
+          class="app-nav"
           :collapsed="collapsed"
           :collapsed-width="64"
+          :collapsed-icon-size="20"
+          :icon-size="18"
+          :indent="16"
           :value="activeKey"
           :options="menuOptions"
           @update:value="onMenuSelect"
         />
-        <div v-if="!collapsed" class="app-sidebar__footer">
-          统一查看净资产、账户结构和关键年度事件。
-        </div>
+        <n-dropdown trigger="click" placement="top-start" :options="userMenuOptions" @select="onUserMenu">
+          <button type="button" class="app-account">
+            <span class="app-user__avatar">{{ userInitial }}</span>
+            <span v-if="!collapsed" class="app-account__meta">
+              <span class="app-account__name">{{ auth.user?.username || '未登录' }}</span>
+              <span class="app-account__role">{{ auth.isAdmin ? '管理员' : '成员' }}</span>
+            </span>
+            <svg v-if="!collapsed" class="app-account__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></svg>
+          </button>
+        </n-dropdown>
       </div>
     </n-layout-sider>
 
-    <n-layout class="app-main">
-      <n-layout-header bordered class="app-header">
-        <n-button v-if="mobile" class="mobile-only" secondary @click="mobileOpen = true">菜单</n-button>
-        <div class="app-header__title">
-          <span class="app-header__eyeline">{{ pageEyeline }}</span>
-          <h1 class="app-header__name">{{ pageTitle }}</h1>
-        </div>
-        <div class="app-header__spacer" />
-        <div class="app-user">
-          <span class="app-user__avatar">{{ userInitial }}</span>
-          <div class="app-user__meta">
-            <span class="app-user__label">当前账号</span>
-            <span class="app-user__name">{{ auth.user?.username || '未登录' }}</span>
-          </div>
-          <n-button size="small" quaternary @click="onLogout">退出</n-button>
-        </div>
-      </n-layout-header>
-      <n-layout-content class="app-content">
+    <n-layout class="app-main" :native-scrollbar="false">
+      <header v-if="mobile" class="app-topbar">
+        <n-button size="small" quaternary @click="mobileOpen = true">
+          <template #icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </template>
+        </n-button>
+        <span class="app-topbar__title">{{ pageTitle }}</span>
+        <n-dropdown trigger="click" placement="bottom-end" :options="userMenuOptions" @select="onUserMenu">
+          <button type="button" class="app-user__avatar app-user__avatar--button">{{ userInitial }}</button>
+        </n-dropdown>
+      </header>
+      <main class="app-content">
         <router-view />
-      </n-layout-content>
+      </main>
     </n-layout>
   </n-layout>
 
-  <n-drawer v-model:show="mobileOpen" placement="left" width="220">
+  <n-drawer v-model:show="mobileOpen" placement="left" :width="264">
     <div class="app-sidebar">
       <div class="app-brand">
-        <span class="app-brand__mark">Z</span>
+        <BrandMark />
         <div class="app-brand__text">
-          <span class="app-brand__title">Project Zero</span>
-          <span class="app-brand__subtitle">Mobile workspace</span>
+          <span class="app-brand__title">Beaver</span>
+          <span class="app-brand__subtitle">个人资产看板</span>
         </div>
       </div>
       <n-menu
+        class="app-nav"
+        :icon-size="18"
+        :indent="16"
         :value="activeKey"
         :options="menuOptions"
         @update:value="onMenuSelect"

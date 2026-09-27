@@ -5,9 +5,12 @@ import { useMessage } from 'naive-ui'
 import type { Account } from '@/types/models'
 import * as accountApi from '@/api/account'
 import { DIM_ACCOUNT_OWNER, DIM_ACCOUNT_TYPE, useSettingsStore } from '@/stores/settings'
+import PageHeader from '@/components/PageHeader.vue'
+import { useCategoryColor } from '@/composables/useCategoryColor'
 
 const message = useMessage()
 const settings = useSettingsStore()
+const { categoryColor } = useCategoryColor()
 const list = ref<Account[]>([])
 const loading = ref(true)
 const showModal = ref(false)
@@ -83,34 +86,39 @@ async function deactivate(row: Account) {
 
 <template>
   <div class="page-stack">
-    <section class="page-header">
-      <div class="page-header__copy">
-        <h2 class="page-header__title">账户</h2>
-        <p class="page-header__desc">通过拖拽整理展示顺序，保持移动端和桌面端都能快速辨认账户结构。</p>
-      </div>
+    <PageHeader title="账户" description="拖动左侧手柄调整顺序，顺序会同步到快照录入和各类图表。">
       <n-button type="primary" @click="openCreate">新建账户</n-button>
-    </section>
+    </PageHeader>
 
     <n-spin :show="loading">
-      <draggable v-model="list" item-key="id" handle=".drag-handle" class="draggable-list" @end="onDragEnd">
-        <template #item="{ element }">
-          <div class="account-row">
-            <div class="account-row__main">
-              <span class="drag-handle">⋮⋮</span>
-              <strong>{{ element.name }}</strong>
-              <n-tag size="small">{{ settings.label(DIM_ACCOUNT_TYPE, element.type) }}</n-tag>
-              <n-tag size="small" type="info">{{ settings.label(DIM_ACCOUNT_OWNER, element.owner) }}</n-tag>
-            </div>
-            <div class="account-row__meta">
-              <span class="section-note">排序 {{ element.sort_order }}</span>
-            </div>
-            <div class="account-row__actions">
-              <n-button size="small" @click="openEdit(element)">编辑</n-button>
-              <n-button size="small" type="warning" @click="deactivate(element)">停用</n-button>
-            </div>
-          </div>
+      <n-card class="surface-panel surface-panel--flush">
+        <template #header>
+          全部账户 <span class="section-note">· {{ list.length }} 个</span>
         </template>
-      </draggable>
+        <draggable v-model="list" item-key="id" handle=".drag-handle" class="draggable-list" @end="onDragEnd">
+          <template #item="{ element }">
+            <div class="account-row">
+              <div class="account-row__main">
+                <span class="drag-handle" title="拖动排序">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" /></svg>
+                </span>
+                <span class="swatch" :style="{ background: categoryColor(DIM_ACCOUNT_TYPE, element.type) }" />
+                <strong>{{ element.name }}</strong>
+                <span class="badge badge--plain">{{ settings.label(DIM_ACCOUNT_TYPE, element.type) }}</span>
+                <span class="badge badge--plain badge--accent">{{ settings.label(DIM_ACCOUNT_OWNER, element.owner) }}</span>
+              </div>
+              <div class="account-row__meta">
+                <span>#{{ element.sort_order }}</span>
+              </div>
+              <div class="account-row__actions">
+                <n-button size="small" quaternary @click="openEdit(element)">编辑</n-button>
+                <n-button size="small" quaternary type="error" @click="deactivate(element)">停用</n-button>
+              </div>
+            </div>
+          </template>
+        </draggable>
+        <n-empty v-if="!loading && !list.length" class="panel-empty" description="还没有账户，先新建一个" />
+      </n-card>
     </n-spin>
     <n-modal v-model:show="showModal" preset="card" :title="editing ? '编辑账户' : '新建账户'" style="width: 480px">
       <n-form>
@@ -125,7 +133,10 @@ async function deactivate(row: Account) {
         </n-form-item>
       </n-form>
       <template #footer>
-        <n-button type="primary" @click="saveAccount">保存</n-button>
+        <div class="modal-footer">
+          <n-button @click="showModal = false">取消</n-button>
+          <n-button type="primary" @click="saveAccount">保存</n-button>
+        </div>
       </template>
     </n-modal>
   </div>

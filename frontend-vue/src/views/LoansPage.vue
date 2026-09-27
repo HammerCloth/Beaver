@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { h, ref, watch } from 'vue'
+import { computed, h, ref, watch } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { Loan, LoanRepayment } from '@/types/models'
 import * as loanApi from '@/api/loan'
 import { formatMoney } from '@/lib/format'
+import PageHeader from '@/components/PageHeader.vue'
+import StatStrip from '@/components/StatStrip.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -28,7 +30,11 @@ const editingLoan = ref<Loan | null>(null)
 const detailLoan = ref<Loan | null>(null)
 const editingRepayment = ref<LoanRepayment | null>(null)
 
-const today = () => new Date().toISOString().slice(0, 10)
+/** 本地日期 YYYY-MM-DD（toISOString 是 UTC，东八区凌晨会差一天） */
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const loanForm = ref<loanApi.LoanBody>({
   borrowerName: '',
@@ -50,35 +56,79 @@ const statusOptions = [
   { label: '已还清', value: 'settled' },
 ]
 
+function isOverdue(row: Loan) {
+  return !row.settled && !!row.due_date && row.due_date < today()
+}
+
+const statItems = computed(() => [
+  { label: '未还总额', value: formatMoney(stats.value.outstandingTotal), tone: stats.value.outstandingTotal > 0 ? ('warning' as const) : ('' as const) },
+  { label: '未还清', value: stats.value.openCount, unit: '笔' },
+  { label: `${stats.value.year} 年收回`, value: formatMoney(stats.value.repaidThisYear), tone: stats.value.repaidThisYear > 0 ? ('positive' as const) : ('' as const) },
+])
+
 const loanColumns: DataTableColumns<Loan> = [
-  { title: '借款人', key: 'borrower_name', minWidth: 120 },
-  { title: '关系', key: 'relationship', width: 90, render: (row) => row.relationship || '—' },
-  { title: '借款日', key: 'loan_date', width: 112 },
-  { title: '约定还日', key: 'due_date', width: 112, render: (row) => row.due_date || '—' },
-  { title: '本金', key: 'amount', width: 110, render: (row) => formatMoney(row.amount) },
-  { title: '已还', key: 'repaid_total', width: 110, render: (row) => formatMoney(row.repaid_total) },
-  { title: '剩余', key: 'remaining', width: 110, render: (row) => formatMoney(row.remaining) },
   {
-    title: '状态',
-    key: 'settled',
-    width: 90,
+    title: '借款人',
+    key: 'borrower_name',
+    minWidth: 140,
+    render: (row) =>
+      h('div', { class: 'cell-stack' }, [
+        h('button', { class: 'text-action cell-main', style: 'text-align: left', onClick: () => openLoanDetail(row.id) }, row.borrower_name),
+        row.relationship ? h('span', { class: 'cell-muted' }, row.relationship) : null,
+      ]),
+  },
+  { title: '借款日', key: 'loan_date', width: 112, render: (row) => h('span', { class: 'cell-muted' }, row.loan_date) },
+  {
+    title: '约定还日',
+    key: 'due_date',
+    width: 112,
+    render: (row) => h('span', { class: isOverdue(row) ? 'text-danger' : 'cell-muted' }, row.due_date || '—'),
+  },
+  { title: '本金', key: 'amount', width: 110, align: 'right', render: (row) => h('span', { class: 'amount' }, formatMoney(row.amount)) },
+  {
+    title: '还款进度',
+    key: 'repaid_total',
+    width: 170,
     render(row) {
-      return h(
-        'span',
-        { class: row.settled ? 'loan-status loan-status--settled' : 'loan-status' },
-        row.settled ? '已还清' : '未还清',
-      )
+      const pct = row.amount > 0 ? Math.min(100, (row.repaid_total / row.amount) * 100) : 0
+      return h('div', { class: 'progress-cell' }, [
+        h('div', { class: 'progress-cell__track' }, [
+          h('div', { class: ['progress-cell__fill', row.settled ? 'is-done' : ''], style: { width: `${pct}%` } }),
+        ]),
+        h('span', { class: 'progress-cell__label' }, `${formatMoney(row.repaid_total)} · ${pct.toFixed(0)}%`),
+      ])
     },
   },
   {
-    title: '操作',
-    key: 'actions',
-    width: 188,
+    title: '剩余',
+    key: 'remaining',
+    width: 110,
+    align: 'right',
+    render: (row) => h('span', { class: ['amount', row.remaining > 0 ? '' : 'amount--muted'] }, formatMoney(row.remaining)),
+  },
+  {
+    title: '状态',
+    key: 'settled',
+    width: 96,
     render(row) {
-      return h('div', { class: 'loan-table-actions' }, [
-        h('button', { class: 'loan-text-button', onClick: () => openLoanDetail(row.id) }, '还款记录'),
-        h('button', { class: 'loan-text-button', onClick: () => openEditLoan(row) }, '编辑'),
-        h('button', { class: 'loan-text-button loan-text-button--danger', onClick: () => confirmDeleteLoan(row) }, '删除'),
+      if (row.settled) {
+        return h('span', { class: 'badge badge--positive' }, '已还清')
+      }
+      return isOverdue(row)
+        ? h('span', { class: 'badge badge--negative' }, '已逾期')
+        : h('span', { class: 'badge badge--warning' }, '未还清')
+    },
+  },
+  {
+    title: '',
+    key: 'actions',
+    width: 160,
+    align: 'right',
+    render(row) {
+      return h('div', { class: 'table-actions' }, [
+        h('button', { class: 'text-action', onClick: () => openLoanDetail(row.id) }, '还款'),
+        h('button', { class: 'text-action', onClick: () => openEditLoan(row) }, '编辑'),
+        h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteLoan(row) }, '删除'),
       ])
     },
   },
@@ -244,34 +294,31 @@ function apiMessage(error: unknown, fallback: string) {
 
 <template>
   <div class="page-stack">
-    <section class="page-header">
-      <div class="page-header__copy">
-        <h2 class="page-header__title">借款</h2>
-        <p class="page-header__desc">记录谁向我们借了钱，并按批次登记对方还款，不与资产快照混用。</p>
-      </div>
+    <PageHeader title="借款" description="记录别人向我们借的钱，按批次登记还款；借款不计入资产快照。">
       <n-button type="primary" @click="openCreateLoan">新增借款</n-button>
-    </section>
+    </PageHeader>
+
+    <div class="filter-bar">
+      <n-select v-model:value="status" class="filter-bar__fixed" :options="statusOptions" />
+      <n-input v-model:value="keyword" class="filter-bar__grow" clearable placeholder="搜索借款人、关系或备注" @keyup.enter="onSearch">
+        <template #prefix>
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        </template>
+      </n-input>
+      <n-input-number v-model:value="year" class="filter-bar__year" :min="2000" :max="2100" />
+      <n-button @click="onSearch">筛选</n-button>
+    </div>
 
     <n-spin :show="loading">
-      <div class="page-stack">
-        <div class="loan-toolbar">
-          <n-select v-model:value="status" :options="statusOptions" />
-          <n-input v-model:value="keyword" clearable placeholder="搜索借款人、关系或备注" @keyup.enter="onSearch" />
-          <n-input-number v-model:value="year" :min="2000" :max="2100" />
-          <n-button @click="onSearch">搜索</n-button>
-        </div>
+      <StatStrip :items="statItems" />
 
-        <section class="loan-summary-grid">
-          <n-card class="surface-panel" size="small"><n-statistic label="未还总额" :value="formatMoney(stats.outstandingTotal)" /></n-card>
-          <n-card class="surface-panel" size="small"><n-statistic label="未还清" :value="stats.openCount" suffix="笔" /></n-card>
-          <n-card class="surface-panel" size="small"><n-statistic label="本年收回" :value="formatMoney(stats.repaidThisYear)" /></n-card>
-        </section>
-
-        <n-card class="surface-panel" title="借款明细">
-          <n-data-table :columns="loanColumns" :data="loans" :row-key="(row: Loan) => row.id" :scroll-x="1080" />
-          <n-empty v-if="!loading && !loans.length" style="padding: 28px 0" description="还没有符合条件的借款记录" />
-        </n-card>
-      </div>
+      <n-card class="surface-panel surface-panel--flush">
+        <template #header>
+          借款明细 <span class="section-note">· {{ loans.length }} 笔</span>
+        </template>
+        <n-data-table :columns="loanColumns" :data="loans" :row-key="(row: Loan) => row.id" :scroll-x="1040" />
+        <n-empty v-if="!loading && !loans.length" class="panel-empty" description="还没有符合条件的借款记录" />
+      </n-card>
     </n-spin>
 
     <n-modal v-model:show="loanModalOpen" preset="card" :title="editingLoan ? '编辑借款' : '新增借款'" style="width: 520px">
@@ -297,18 +344,22 @@ function apiMessage(error: unknown, fallback: string) {
           <n-input v-model:value="loanForm.note" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" />
         </n-form-item>
       </n-form>
-      <template #footer><n-button type="primary" @click="saveLoan">保存</n-button></template>
+      <template #footer><div class="modal-footer"><n-button @click="loanModalOpen = false">取消</n-button><n-button type="primary" @click="saveLoan">保存</n-button></div></template>
     </n-modal>
 
-    <n-drawer :show="Boolean(detailLoan)" :width="460" placement="right" @update:show="(show) => { if (!show) detailLoan = null }">
+    <n-drawer :show="Boolean(detailLoan)" :width="460" placement="right" @update:show="(show: boolean) => { if (!show) detailLoan = null }">
       <n-drawer-content v-if="detailLoan" :title="detailLoan.borrower_name">
-        <n-tag v-if="detailLoan.relationship" size="small">{{ detailLoan.relationship }}</n-tag>
-        <n-tag size="small" :type="detailLoan.settled ? 'success' : 'warning'" style="margin-left: 8px">
-          {{ detailLoan.settled ? '已还清' : '未还清' }}
-        </n-tag>
-        <p class="section-note">
-          本金 {{ formatMoney(detailLoan.amount) }}，已还 {{ formatMoney(detailLoan.repaid_total) }}，剩余 {{ formatMoney(detailLoan.remaining) }}
-        </p>
+        <div class="drawer-badges">
+          <span v-if="detailLoan.relationship" class="badge badge--plain">{{ detailLoan.relationship }}</span>
+          <span class="badge" :class="detailLoan.settled ? 'badge--positive' : 'badge--warning'">
+            {{ detailLoan.settled ? '已还清' : '未还清' }}
+          </span>
+        </div>
+        <div class="drawer-stats">
+          <div><span>本金</span><strong>{{ formatMoney(detailLoan.amount) }}</strong></div>
+          <div><span>已还</span><strong>{{ formatMoney(detailLoan.repaid_total) }}</strong></div>
+          <div><span>剩余</span><strong>{{ formatMoney(detailLoan.remaining) }}</strong></div>
+        </div>
         <p v-if="detailLoan.due_date" class="section-note">约定还日 {{ detailLoan.due_date }}</p>
         <p v-if="detailLoan.note" class="loan-note">{{ detailLoan.note }}</p>
 
@@ -343,7 +394,7 @@ function apiMessage(error: unknown, fallback: string) {
             </div>
             <n-space size="small">
               <n-button size="small" @click="resetRepaymentForm(item)">编辑</n-button>
-              <n-button size="small" type="warning" @click="confirmDeleteRepayment(item)">删除</n-button>
+              <n-button size="small" quaternary type="error" @click="confirmDeleteRepayment(item)">删除</n-button>
             </n-space>
           </div>
           <n-empty v-if="!detailLoan.repayments?.length" description="还没有还款记录，可按批次登记" style="padding: 20px 0" />
@@ -354,23 +405,12 @@ function apiMessage(error: unknown, fallback: string) {
 </template>
 
 <style scoped>
-.loan-toolbar { display: grid; grid-template-columns: 124px minmax(180px, 1fr) 124px auto; gap: 12px; align-items: center; }
-.loan-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.loan-text-button { border: 0; background: none; color: #426879; cursor: pointer; font: inherit; padding: 0; }
-.loan-text-button:hover { color: #b7791f; }
-.loan-table-actions { display: flex; gap: 12px; }
-.loan-text-button--danger { color: #b44c43; }
-.loan-status { color: #b7791f; font-weight: 600; }
-.loan-status--settled { color: #2f6f4e; }
 .loan-drawer-title { margin: 24px 0 12px; font-size: 15px; }
-.loan-note { margin: 5px 0 0; color: #62665f; font-size: 13px; }
+.loan-note { margin: 5px 0 0; color: var(--text-2); font-size: 13px; }
 .loan-repayment-list { display: grid; gap: 8px; }
-.loan-repayment-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #e5e1d8; }
+.loan-repayment-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
 .loan-repayment-row:last-child { border-bottom: 0; }
 .loan-repayment-row .section-note { margin-left: 8px; }
 @media (max-width: 760px) {
-  .loan-toolbar { grid-template-columns: 1fr 1fr; }
-  .loan-toolbar :deep(.n-input) { grid-column: span 2; }
-  .loan-summary-grid { grid-template-columns: 1fr; gap: 10px; }
 }
 </style>

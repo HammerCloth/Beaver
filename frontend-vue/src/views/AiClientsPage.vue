@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { h, onMounted, ref } from 'vue'
-import { NButton, NTag, useDialog, useMessage } from 'naive-ui'
+import { useDialog, useMessage } from 'naive-ui'
 import * as oauthApi from '@/api/oauth'
 import type { OAuthAuthorization } from '@/api/oauth'
+import PageHeader from '@/components/PageHeader.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -19,39 +20,41 @@ const columns = [
         h('span', { class: 'cell-muted' }, row.clientId),
       ]),
   },
-  { title: '权限', key: 'scope' },
-  { title: '授权时间', key: 'createdAt' },
+  {
+    title: '权限',
+    key: 'scope',
+    render: (row: OAuthAuthorization) => h('code', { class: 'scope-code' }, row.scope),
+  },
+  {
+    title: '授权时间',
+    key: 'createdAt',
+    render: (row: OAuthAuthorization) => h('span', { class: 'cell-muted' }, row.createdAt),
+  },
   {
     title: '最后使用',
     key: 'lastUsedAt',
-    render: (row: OAuthAuthorization) => row.lastUsedAt || '尚未使用',
+    render: (row: OAuthAuthorization) => h('span', { class: 'cell-muted' }, row.lastUsedAt || '尚未使用'),
   },
-  { title: '过期时间', key: 'expiresAt' },
+  {
+    title: '过期时间',
+    key: 'expiresAt',
+    render: (row: OAuthAuthorization) => h('span', { class: 'cell-muted' }, row.expiresAt),
+  },
   {
     title: '状态',
     key: 'status',
     render: (row: OAuthAuthorization) =>
-      h(
-        NTag,
-        { size: 'small', type: row.revokedAt ? 'default' : 'success' },
-        { default: () => (row.revokedAt ? '已撤销' : '有效') },
-      ),
+      h('span', { class: ['badge', row.revokedAt ? '' : 'badge--positive'] }, row.revokedAt ? '已撤销' : '有效'),
   },
   {
-    title: '操作',
+    title: '',
     key: 'actions',
-    width: 100,
+    width: 80,
+    align: 'right' as const,
     render: (row: OAuthAuthorization) =>
-      h(
-        NButton,
-        {
-          size: 'small',
-          quaternary: true,
-          disabled: Boolean(row.revokedAt),
-          onClick: () => revoke(row),
-        },
-        { default: () => '撤销' },
-      ),
+      row.revokedAt
+        ? null
+        : h('button', { class: 'text-action text-action--danger', onClick: () => revoke(row) }, '撤销'),
   },
 ]
 
@@ -99,25 +102,33 @@ onMounted(() => {
 
 <template>
   <div class="page-stack">
-    <section class="page-header">
-      <div class="page-header__copy">
-        <h2 class="page-header__title">AI 客户端</h2>
-        <p class="page-header__desc">查看和撤销已授权访问 MCP 的 AI Agent 客户端。</p>
-      </div>
-      <div class="inline-control">
-        <n-button @click="refresh">刷新</n-button>
-        <n-button type="warning" :disabled="rows.length === 0" @click="revokeAll">全部撤销</n-button>
-      </div>
-    </section>
+    <PageHeader title="AI 客户端" description="通过 MCP 授权访问你数据的 AI Agent。不再使用的客户端请及时撤销。">
+      <n-button @click="refresh">刷新</n-button>
+      <n-button secondary type="error" :disabled="rows.length === 0" @click="revokeAll">全部撤销</n-button>
+    </PageHeader>
 
-    <n-card class="surface-panel">
+    <n-card class="surface-panel surface-panel--flush">
+      <template #header>
+        已授权客户端 <span class="section-note">· {{ rows.length }} 个</span>
+      </template>
       <n-data-table
         :columns="columns"
         :data="rows"
         :loading="loading"
-        :pagination="{ pageSize: 10 }"
+        :pagination="rows.length > 10 ? { pageSize: 10 } : false"
         :row-key="(row: OAuthAuthorization) => row.id"
       />
     </n-card>
   </div>
 </template>
+
+<style scoped>
+:deep(.scope-code) {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+</style>

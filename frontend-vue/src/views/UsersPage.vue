@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { h, onMounted, ref } from 'vue'
-import { NButton, useMessage } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { User } from '@/types/models'
 import * as userApi from '@/api/user'
+import PageHeader from '@/components/PageHeader.vue'
 
 const message = useMessage()
 const rows = ref<User[]>([])
@@ -60,44 +61,49 @@ async function savePwd() {
 }
 
 const columns: DataTableColumns<User> = [
-  { title: '用户名', key: 'username' },
   {
-    title: '管理员',
+    title: '用户',
+    key: 'username',
+    render: (row) =>
+      h('span', { class: 'cell-name' }, [
+        h('span', { class: 'app-user__avatar' }, row.username.slice(0, 1).toUpperCase()),
+        h('span', { class: 'cell-main' }, row.username),
+      ]),
+  },
+  {
+    title: '角色',
     key: 'is_admin',
-    render(row) {
-      return row.is_admin ? '是' : '否'
-    },
+    render: (row) => h('span', { class: ['badge', row.is_admin ? 'badge--accent' : ''] }, row.is_admin ? '管理员' : '成员'),
   },
   {
-    title: '须改密',
+    title: '密码状态',
     key: 'must_change_password',
-    render(row) {
-      return row.must_change_password ? '是' : '否'
-    },
+    render: (row) =>
+      row.must_change_password
+        ? h('span', { class: 'badge badge--warning' }, '待首次改密')
+        : h('span', { class: 'badge badge--positive' }, '正常'),
   },
   {
-    title: '操作',
+    title: '',
     key: 'a',
-    render(row) {
-      return h(NButton, { size: 'small', onClick: () => openPwd(row) }, { default: () => '重置密码' })
-    },
+    align: 'right',
+    render: (row) => h('button', { class: 'text-action', onClick: () => openPwd(row) }, '重置密码'),
   },
 ]
 </script>
 
 <template>
   <div class="page-stack">
-    <section class="page-header">
-      <div class="page-header__copy">
-        <h2 class="page-header__title">用户管理</h2>
-        <p class="page-header__desc">创建新用户、重置密码，并检查是否需要首次改密。</p>
-      </div>
+    <PageHeader title="用户管理" description="创建成员账号、重置密码。新用户首次登录时需要修改密码。">
       <n-button type="primary" @click="showCreate = true">新建用户</n-button>
-    </section>
+    </PageHeader>
     <n-spin :show="loading">
-      <div class="data-table-shell">
+      <n-card class="surface-panel surface-panel--flush">
+        <template #header>
+          全部用户 <span class="section-note">· {{ rows.length }} 人</span>
+        </template>
         <n-data-table :columns="columns" :data="rows" :row-key="(r: User) => r.id" />
-      </div>
+      </n-card>
     </n-spin>
     <n-modal v-model:show="showCreate" preset="card" title="新建用户" style="width: 440px">
       <n-form>
@@ -112,13 +118,19 @@ const columns: DataTableColumns<User> = [
         </n-form-item>
       </n-form>
       <template #footer>
-        <n-button type="primary" @click="create">创建</n-button>
+        <div class="modal-footer">
+          <n-button @click="showCreate = false">取消</n-button>
+          <n-button type="primary" @click="create">创建</n-button>
+        </div>
       </template>
     </n-modal>
     <n-modal v-model:show="showPwd" preset="card" title="重置密码" style="width: 400px">
       <n-input v-model:value="newPwd" type="password" show-password-on="click" placeholder="新密码（至少 8 位）" />
       <template #footer>
-        <n-button type="primary" @click="savePwd">保存</n-button>
+        <div class="modal-footer">
+          <n-button @click="showPwd = false">取消</n-button>
+          <n-button type="primary" @click="savePwd">保存</n-button>
+        </div>
       </template>
     </n-modal>
   </div>

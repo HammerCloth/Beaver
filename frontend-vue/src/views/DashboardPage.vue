@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
+import { useRouter } from 'vue-router'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { BarChart, LineChart, PieChart, SankeyChart } from 'echarts/charts'
@@ -10,11 +11,15 @@ import {
   TitleComponent,
   TooltipComponent,
 } from 'echarts/components'
-import VChart from 'vue-echarts'
+import VChart, { THEME_KEY } from 'vue-echarts'
+import { CHART_THEME, chartNegative, chartNegativeSoft, chartPalette, chartPositive, chartPositiveSoft } from '@/lib/chartTheme'
 import * as accountApi from '@/api/account'
 import * as dashboardApi from '@/api/dashboard'
 import type { DashboardComposition, DashboardTypeChange } from '@/api/dashboard'
 import { formatMoney } from '@/lib/format'
+import DonutBreakdown, { type DonutItem } from '@/components/DonutBreakdown.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import { useCategoryColor } from '@/composables/useCategoryColor'
 import { DIM_ACCOUNT_OWNER, DIM_ACCOUNT_TYPE, useSettingsStore } from '@/stores/settings'
 
 use([
@@ -29,7 +34,10 @@ use([
   TitleComponent,
 ])
 
+provide(THEME_KEY, CHART_THEME)
+
 const message = useMessage()
+const router = useRouter()
 const settings = useSettingsStore()
 const loading = ref(true)
 const isMobileChart = ref(false)
@@ -55,70 +63,80 @@ const typeChange = ref<DashboardTypeChange>({
 /** 账户 id → 展示名（用于分账户占比图） */
 const accountNameById = ref<Record<string, string>>({})
 
+const { categoryColor } = useCategoryColor()
+const typeColor = (key: string) => categoryColor(DIM_ACCOUNT_TYPE, key)
+
 const trendOption = computed(() => ({
+  grid: { left: 8, right: 12, top: 12, bottom: 4, containLabel: true },
   tooltip: {
     trigger: 'axis',
     valueFormatter: (v: number) => formatMoney(v),
   },
-  xAxis: { type: 'category', data: trendPoints.value.map((p) => p.date) },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: trendPoints.value.map((p) => p.date),
+    axisLine: { show: false },
+    axisLabel: { hideOverlap: true, margin: 12 },
+  },
   yAxis: {
     type: 'value',
     scale: true,
-    axisLabel: { formatter: (v: number) => formatMoney(v) },
+    position: 'right',
+    splitNumber: 3,
+    axisLabel: { formatter: (v: number) => formatAssetAmount(v).replace('.00', '') },
   },
   series: [
     {
       type: 'line',
-      smooth: true,
+      smooth: 0.35,
+      symbol: 'circle',
+      symbolSize: 6,
+      showSymbol: false,
+      lineStyle: { width: 2.5, color: '#1d9bf0' },
+      itemStyle: { color: '#1d9bf0' },
       data: trendPoints.value.map((p) => p.netWorth),
-      areaStyle: {},
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(29, 155, 240, 0.2)' },
+            { offset: 1, color: 'rgba(29, 155, 240, 0)' },
+          ],
+        },
+      },
     },
   ],
 }))
 
-const typePie = computed(() => ({
-  tooltip: {
-    trigger: 'item',
-    valueFormatter: (v: number) => formatMoney(v as number),
-  },
-  legend: {
-    type: 'scroll',
-    bottom: 0,
-    left: 'center',
-  },
-  series: [
-    {
-      type: 'pie',
-      radius: ['32%', '56%'],
-      data: Object.entries(composition.value.byType).map(([key, value]) => ({
-        name: settings.label(DIM_ACCOUNT_TYPE, key),
-        value,
-      })),
-    },
-  ],
-}))
+const compositionMode = ref<'type' | 'owner'>('type')
 
-const ownerPie = computed(() => ({
-  tooltip: {
-    trigger: 'item',
-    valueFormatter: (v: number) => formatMoney(v as number),
-  },
-  legend: {
-    type: 'scroll',
-    bottom: 0,
-    left: 'center',
-  },
-  series: [
-    {
-      type: 'pie',
-      radius: ['32%', '56%'],
-      data: Object.entries(composition.value.byOwner).map(([key, value]) => ({
+const compositionItems = computed<DonutItem[]>(() => {
+  if (compositionMode.value === 'owner') {
+    // byOwner 是各归属的净额（已扣负债）；只展示净额为正的归属，中心显示净资产
+    return Object.entries(composition.value.byOwner)
+      .filter(([, value]) => value > 0)
+      .map(([key, value]) => ({
+        id: key,
         name: settings.label(DIM_ACCOUNT_OWNER, key),
         value,
-      })),
-    },
-  ],
-}))
+        color: categoryColor(DIM_ACCOUNT_OWNER, key),
+      }))
+  }
+  // 与「总资产」口径一致：只统计正资产，负债不计入
+  return Object.entries(composition.value.byType)
+    .filter(([, value]) => value > 0)
+    .map(([key, value]) => ({
+      id: key,
+      name: settings.label(DIM_ACCOUNT_TYPE, key),
+      value,
+      color: typeColor(key),
+    }))
+})
 
 const typeChangeOption = computed(() => {
   const items = typeChange.value.items.filter((item) => Number.isFinite(item.change))
@@ -128,8 +146,8 @@ const typeChangeOption = computed(() => {
   const minValue = Math.min(0, ...values)
   const span = Math.max(maxValue - minValue, Math.max(Math.abs(maxValue), Math.abs(minValue)), 1)
   const padding = span * 0.18
-  const positiveColor = '#3fb68b'
-  const negativeColor = '#d86a62'
+  const positiveColor = chartPositiveSoft
+  const negativeColor = chartNegativeSoft
   return {
     tooltip: {
       trigger: 'axis',
@@ -170,14 +188,13 @@ const typeChangeOption = computed(() => {
       max: maxValue + padding,
       min: minValue - padding,
       axisLabel: { formatter: (v: number) => formatAssetAmount(v) },
-      splitLine: { lineStyle: { color: '#e5e7eb' } },
     },
     series: [
       {
         name: '流入',
         type: 'bar',
         clip: false,
-        barMaxWidth: 34,
+        barMaxWidth: 26,
         data: sorted.map((item) => ({
           value: item.change > 0 ? item.change : null,
           itemStyle: {
@@ -190,7 +207,8 @@ const typeChangeOption = computed(() => {
           position: 'top',
           verticalAlign: 'bottom',
           distance: 10,
-          color: '#475569',
+          color: chartPositive,
+          fontWeight: 700,
           fontSize: isMobileChart.value ? 10 : 11,
           formatter: (p: { value?: number }) => {
             const value = Number(p.value ?? 0)
@@ -203,7 +221,7 @@ const typeChangeOption = computed(() => {
         type: 'bar',
         clip: false,
         barGap: '-100%',
-        barMaxWidth: 34,
+        barMaxWidth: 26,
         data: sorted.map((item) => ({
           value: item.change < 0 ? item.change : null,
           itemStyle: {
@@ -216,7 +234,8 @@ const typeChangeOption = computed(() => {
           position: 'bottom',
           verticalAlign: 'top',
           distance: 10,
-          color: '#475569',
+          color: chartNegative,
+          fontWeight: 700,
           fontSize: isMobileChart.value ? 10 : 11,
           formatter: (p: { value?: number }) => {
             const value = Number(p.value ?? 0)
@@ -228,7 +247,32 @@ const typeChangeOption = computed(() => {
   }
 })
 
+function signedMoney(value: number) {
+  return `${value > 0 ? '+' : ''}${formatMoney(value)}`
+}
+
+function toneOf(value: number) {
+  return value > 0 ? 'positive' : value < 0 ? 'negative' : ''
+}
+
+const kpis = computed(() => [
+  { label: '净资产', value: formatMoney(summary.value.netWorth), hint: '最新快照', tone: '' },
+  {
+    label: '近一月变化',
+    value: signedMoney(summary.value.monthlyChange),
+    hint: '对比一个月前的快照',
+    tone: toneOf(summary.value.monthlyChange),
+  },
+  {
+    label: '近一年变化',
+    value: signedMoney(summary.value.annualChange),
+    hint: '对比一年前的快照',
+    tone: toneOf(summary.value.annualChange),
+  },
+])
+
 const typeChangeHasData = computed(() => Boolean(typeChange.value.previousDate && typeChange.value.items.length))
+const typeChangeAllZero = computed(() => typeChange.value.items.every((item) => !item.change))
 
 const typeChangeSummary = computed(() => {
   const total = typeChange.value.items.reduce((sum, item) => sum + (Number.isFinite(item.change) ? item.change : 0), 0)
@@ -241,18 +285,7 @@ const typeChangeSummary = computed(() => {
   return { label: '净变化', value: 0, tone: 'neutral' }
 })
 
-const palette = [
-  '#6366f1',
-  '#22c55e',
-  '#f97316',
-  '#ec4899',
-  '#14b8a6',
-  '#a855f7',
-  '#eab308',
-  '#64748b',
-]
-
-const sankeyPalette = ['#44c2a0', '#8b90d8', '#df8f68', '#8f79bb', '#5aa6d8', '#d6a33d', '#6d7d8f']
+const palette = chartPalette
 type SankeyNode = { name: string; labelName: string; raw?: number; itemStyle?: { color: string } }
 type SankeyLink = { source: string; target: string; value: number; raw?: number; labelName: string }
 
@@ -294,14 +327,15 @@ const assetSankeyData = computed(() => {
 
   const totalAssets = positiveTypes.reduce((sum, [, value]) => sum + value, 0)
 
-  addNode('summary:totalAssets', '总资产', sankeyPalette[1], totalAssets)
+  addNode('summary:totalAssets', '总资产', palette[0], totalAssets)
 
   positiveTypes
     .sort((a, b) => b[1] - a[1])
-    .forEach(([type, value], index) => {
+    .forEach(([type, value]) => {
       const typeName = settings.label(DIM_ACCOUNT_TYPE, type)
       const typeNodeName = `type:${type}`
-      addNode(typeNodeName, typeName, sankeyPalette[(index + 2) % sankeyPalette.length], value)
+      const nodeColor = typeColor(type)
+      addNode(typeNodeName, typeName, nodeColor, value)
       links.push({
         source: 'summary:totalAssets',
         target: typeNodeName,
@@ -317,7 +351,7 @@ const assetSankeyData = computed(() => {
         .forEach(([accountId, accountValue]) => {
           const accountName = accountNameById.value[accountId] ?? accountId
           const accountNodeName = `account:${accountId}`
-          addNode(accountNodeName, accountName, sankeyPalette[(index + 3) % sankeyPalette.length], accountValue)
+          addNode(accountNodeName, accountName, nodeColor, accountValue)
           links.push({
             source: typeNodeName,
             target: accountNodeName,
@@ -363,10 +397,10 @@ const assetSankeyOption = computed(() => ({
       lineStyle: {
         color: 'gradient',
         curveness: 0.56,
-        opacity: 0.34,
+        opacity: 0.3,
       },
       label: {
-        color: '#334155',
+        color: '#374151',
         fontSize: isMobileChart.value ? 9 : 12,
         lineHeight: isMobileChart.value ? 12 : 16,
         width: isMobileChart.value ? 74 : undefined,
@@ -428,42 +462,22 @@ watch(
   { immediate: true },
 )
 
-/** 当前选中类型下，各账户占比（饼图扇区用绝对值，便于负债等类型展示；tooltip 显示带符号金额） */
-const typeAccountSharePieOption = computed(() => {
+/** 当前选中类型下，各账户占比（扇区用绝对值，便于负债等类型展示；列表显示带符号金额） */
+const typeAccountShareItems = computed<DonutItem[]>(() => {
   const bta = composition.value.byTypeAccounts
   const t = accountShareTypeKey.value
   if (!bta || !t) {
-    return {
-      tooltip: { trigger: 'item' as const },
-      legend: { type: 'scroll' as const, bottom: 0, left: 'center' },
-      series: [{ type: 'pie' as const, radius: ['34%', '58%'], data: [] as { name: string; value: number }[] }],
-    }
+    return []
   }
-  const row = bta[t] ?? {}
-  const entries = Object.entries(row).filter(([, v]) => v !== 0 && !Number.isNaN(v))
-  const data = entries.map(([id, raw], i) => ({
-    name: accountNameById.value[id] ?? id,
-    value: Math.abs(raw),
-    raw,
-    itemStyle: { color: palette[i % palette.length] },
-  }))
-  return {
-    tooltip: {
-      trigger: 'item' as const,
-      formatter: (p: { name?: string; data?: { raw?: number } }) => {
-        const raw = Number(p.data?.raw ?? 0)
-        return `${p.name ?? ''}<br/>${formatMoney(raw)}`
-      },
-    },
-    legend: { type: 'scroll' as const, bottom: 0, left: 'center' },
-    series: [
-      {
-        type: 'pie' as const,
-        radius: ['34%', '58%'],
-        data,
-      },
-    ],
-  }
+  return Object.entries(bta[t] ?? {})
+    .filter(([, v]) => v !== 0 && !Number.isNaN(v))
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .map(([id, raw], i) => ({
+      id,
+      name: accountNameById.value[id] ?? id,
+      value: raw,
+      color: palette[i % palette.length],
+    }))
 })
 
 const typeAccountSharePieHasData = computed(() => {
@@ -498,7 +512,11 @@ const stackedByTypeOption = computed(() => {
     name: settings.label(DIM_ACCOUNT_TYPE, key),
     type: 'line' as const,
     stack: 'nw',
-    areaStyle: {},
+    showSymbol: false,
+    smooth: 0.3,
+    lineStyle: { width: 1.5, color: typeColor(key) },
+    itemStyle: { color: typeColor(key) },
+    areaStyle: { opacity: 0.28, color: typeColor(key) },
     data: pts.map((p) => p.byType[key] ?? 0),
   }))
   return {
@@ -586,103 +604,121 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page-stack">
+    <PageHeader title="资产总览">
+      <template #description>
+        <template v-if="typeChange.latestDate">数据截至 {{ typeChange.latestDate }} 的最新快照</template>
+        <template v-else>基于最新快照的净资产、结构与变化趋势</template>
+      </template>
+      <n-button type="primary" @click="router.push('/snapshots/new')">记录快照</n-button>
+    </PageHeader>
+
     <n-spin :show="loading">
-      <n-card class="surface-panel" title="资产全貌">
-        <div class="asset-sankey-summary">
-          <span class="asset-sankey-summary__primary">净资产 {{ formatAssetAmount(summary.netWorth) }}</span>
-        </div>
-        <v-chart
-          v-if="assetSankeyData.links.length"
-          class="chart-frame chart-frame--sankey"
-          :option="assetSankeyOption"
-          autoresize
-        />
-        <n-empty v-else description="暂无资产快照数据" />
-      </n-card>
-
-      <n-card class="surface-panel" title="资金变化">
-        <div class="type-change-summary">
-          <div
-            class="type-change-summary__value"
-            :class="`type-change-summary__value--${typeChangeSummary.tone}`"
-          >
-            {{ typeChangeSummary.label }} {{ formatAssetAmount(typeChangeSummary.value) }}
+      <section class="bento">
+        <div class="bento__span-8 hero-card">
+          <div class="hero-card__head">
+            <div>
+              <div class="hero-card__label">净资产</div>
+              <div class="hero-card__value">{{ formatMoney(summary.netWorth) }}</div>
+              <div class="hero-card__chips">
+                <span v-for="kpi in kpis.slice(1)" :key="kpi.label" class="delta-chip" :class="kpi.tone && `delta-chip--${kpi.tone}`">
+                  <span class="delta-chip__label">{{ kpi.label }}</span>
+                  {{ kpi.value }}
+                </span>
+              </div>
+            </div>
+            <n-tabs v-model:value="range" type="segment" size="small" class="range-tabs">
+              <n-tab name="3m">3月</n-tab>
+              <n-tab name="6m">6月</n-tab>
+              <n-tab name="1y">1年</n-tab>
+              <n-tab name="all">全部</n-tab>
+            </n-tabs>
           </div>
-          <span v-if="typeChange.latestDate && typeChange.previousDate" class="section-note">
-            {{ typeChange.previousDate }} → {{ typeChange.latestDate }}
-          </span>
+          <v-chart v-if="trendPoints.length" class="hero-card__chart" :option="trendOption" autoresize />
+          <n-empty v-else class="hero-card__chart" description="暂无趋势数据" />
         </div>
-        <v-chart
-          v-if="typeChangeHasData"
-          class="chart-frame--compact"
-          :option="typeChangeOption"
-          autoresize
-        />
-        <n-empty v-else description="暂无可对比的类型变化" />
-      </n-card>
 
-      <n-card class="surface-panel" title="净资产趋势">
-        <div class="table-toolbar" style="margin-bottom: 12px">
-          <span class="section-note">查看不同时间窗口下的整体走势</span>
-          <n-radio-group v-model:value="range">
-            <n-radio-button value="3m">3 个月</n-radio-button>
-            <n-radio-button value="6m">6 个月</n-radio-button>
-            <n-radio-button value="1y">1 年</n-radio-button>
-            <n-radio-button value="all">全部</n-radio-button>
-          </n-radio-group>
-        </div>
-        <v-chart v-if="trendPoints.length" class="chart-frame" :option="trendOption" autoresize />
-        <n-empty v-else description="暂无数据" />
-      </n-card>
-
-      <n-card class="surface-panel" title="资产堆叠（按类型）">
-        <span class="section-note" style="display: block; margin-bottom: 8px">与上方时间范围一致</span>
-        <v-chart v-if="stackedPoints.length" class="chart-frame" :option="stackedByTypeOption" autoresize />
-        <n-empty v-else description="暂无数据" />
-      </n-card>
-
-      <section class="section-grid section-grid--two">
-        <n-card class="surface-panel" title="资产构成（类型）">
-          <v-chart
-            v-if="Object.keys(composition.byType).length"
-            class="chart-frame--compact"
-            :option="typePie"
-            autoresize
+        <n-card class="bento__span-4 surface-panel" title="资产构成">
+          <template #header-extra>
+            <n-tabs v-model:value="compositionMode" type="segment" size="small" class="mini-tabs">
+              <n-tab name="type">类型</n-tab>
+              <n-tab name="owner">归属</n-tab>
+            </n-tabs>
+          </template>
+          <DonutBreakdown
+            v-if="compositionItems.length"
+            :items="compositionItems"
+            :center-label="compositionMode === 'type' ? '总资产' : '净资产'"
+            :center-value="compositionMode === 'type' ? undefined : summary.netWorth"
           />
-          <n-empty v-else />
+          <n-empty v-else description="暂无资产快照数据" />
         </n-card>
-        <n-card class="surface-panel" title="资产构成（归属）">
+
+        <n-card class="bento__span-12 surface-panel" title="资产流向">
+          <template #header-extra>
+            <span class="section-note">总资产 → 类型 → 账户</span>
+          </template>
           <v-chart
-            v-if="Object.keys(composition.byOwner).length"
-            class="chart-frame--compact"
-            :option="ownerPie"
+            v-if="assetSankeyData.links.length"
+            class="chart-frame chart-frame--sankey"
+            :option="assetSankeyOption"
             autoresize
           />
-          <n-empty v-else />
+          <n-empty v-else description="暂无资产快照数据" />
+        </n-card>
+
+        <n-card class="bento__span-8 surface-panel" title="资产堆叠">
+          <template #header-extra>
+            <span class="section-note">按类型 · 与上方时间范围一致</span>
+          </template>
+          <v-chart v-if="stackedPoints.length" class="chart-frame" :option="stackedByTypeOption" autoresize />
+          <n-empty v-else description="暂无数据" />
+        </n-card>
+
+        <n-card class="bento__span-4 surface-panel" title="类型内账户">
+          <template #header-extra>
+            <n-select
+              v-model:value="accountShareTypeKey"
+              :options="accountShareTypeOptions"
+              size="small"
+              placeholder="选择类型"
+              style="width: 112px"
+              :disabled="!accountShareTypeOptions.length"
+            />
+          </template>
+          <DonutBreakdown
+            v-if="accountShareTypeKey && typeAccountSharePieHasData"
+            :items="typeAccountShareItems"
+            :center-label="accountShareTypeOptions.find((o) => o.value === accountShareTypeKey)?.label"
+            :center-value="typeAccountShareItems.reduce((sum, x) => sum + x.value, 0)"
+          />
+          <n-empty v-else-if="!accountShareTypeOptions.length" description="暂无分账户数据" />
+          <n-empty v-else description="该类型下暂无账户余额" />
+        </n-card>
+
+        <n-card class="bento__span-12 surface-panel" title="较上次快照变化">
+          <template #header-extra>
+            <span v-if="typeChange.latestDate && typeChange.previousDate" class="section-note">
+              {{ typeChange.previousDate }} → {{ typeChange.latestDate }}
+            </span>
+          </template>
+          <div class="type-change-summary">
+            <div
+              class="type-change-summary__value"
+              :class="`type-change-summary__value--${typeChangeSummary.tone}`"
+            >
+              {{ typeChangeSummary.label }} {{ formatAssetAmount(typeChangeSummary.value) }}
+            </div>
+          </div>
+          <div v-if="typeChangeHasData && typeChangeAllZero" class="section-note">两次快照之间各类型余额没有变化。</div>
+          <v-chart
+            v-else-if="typeChangeHasData"
+            class="chart-frame--compact"
+            :option="typeChangeOption"
+            autoresize
+          />
+          <n-empty v-else description="暂无可对比的类型变化" />
         </n-card>
       </section>
-
-      <n-card class="surface-panel" title="各类型内账户占比">
-        <div class="page-stack" style="gap: 12px">
-          <span class="section-note">基于最新快照；选择资产类型后，以饼图查看该类型下各账户金额占比。</span>
-          <n-select
-            v-model:value="accountShareTypeKey"
-            :options="accountShareTypeOptions"
-            placeholder="选择资产类型"
-            style="max-width: 320px"
-            :disabled="!accountShareTypeOptions.length"
-          />
-        </div>
-        <v-chart
-          v-if="accountShareTypeKey && typeAccountSharePieHasData"
-          class="chart-frame--compact"
-          :option="typeAccountSharePieOption"
-          autoresize
-        />
-        <n-empty v-else-if="!accountShareTypeOptions.length" description="暂无分账户数据（需后端返回 byTypeAccounts）" />
-        <n-empty v-else description="该类型下暂无可展示的账户余额" />
-      </n-card>
-
     </n-spin>
   </div>
 </template>

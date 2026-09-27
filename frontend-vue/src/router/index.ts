@@ -41,13 +41,15 @@ const router = createRouter({
         {
           path: 'snapshots',
           name: 'snapshots',
-          component: () => import('@/views/SnapshotsPage.vue'),
-        },
-        {
-          path: 'snapshots/calendar',
-          name: 'snapshot-calendar',
           component: () => import('@/views/SnapshotCalendarPage.vue'),
         },
+        {
+          path: 'snapshots/list',
+          name: 'snapshot-list',
+          component: () => import('@/views/SnapshotsPage.vue'),
+        },
+        // 旧地址：日历曾在 /snapshots/calendar，保留重定向以免书签失效
+        { path: 'snapshots/calendar', redirect: { name: 'snapshots' } },
         {
           path: 'snapshots/new',
           name: 'snapshot-new',

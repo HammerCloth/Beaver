@@ -3,16 +3,45 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import * as snapshotApi from '@/api/snapshot'
+import { formatMoney } from '@/lib/format'
+import PageHeader from '@/components/PageHeader.vue'
+import SnapshotViewSwitch from '@/components/SnapshotViewSwitch.vue'
 
 const router = useRouter()
 const message = useMessage()
 
-const viewMonth = ref(new Date())
+/** 始终用每月 1 号，避免 31 号时 setMonth(±1) 溢出跳月 */
+function firstOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+
+const viewMonth = ref(firstOfMonth(new Date()))
 
 const year = computed(() => viewMonth.value.getFullYear())
 const month = computed(() => viewMonth.value.getMonth())
 
 const snapshotDates = ref<Set<string>>(new Set())
+/** 日期 → 净资产，用于在格子里显示金额 */
+const netWorthByDate = ref<Record<string, number>>({})
+const now = new Date()
+const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+snapshotApi
+  .listSnapshots()
+  .then((list) => {
+    netWorthByDate.value = Object.fromEntries(list.map((x) => [x.date, x.netWorth]))
+  })
+  .catch(() => {})
+
+const monthCount = computed(() => snapshotDates.value.size)
+
+function compactMoney(v: number) {
+  return Math.abs(v) >= 10000 ? `¥${(v / 10000).toFixed(2)}万` : formatMoney(v)
+}
+
+function goToday() {
+  viewMonth.value = firstOfMonth(new Date())
+}
 
 function ymd(y: number, m: number, d: number) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -84,19 +113,23 @@ watch(
 
 <template>
   <div class="page-stack">
-    <section class="page-header">
-      <div class="page-header__copy">
-        <h2 class="page-header__title">快照日历</h2>
-        <p class="page-header__desc">按月份查看已记录日期。点进已有快照，或直接在空白日期创建新记录。</p>
-      </div>
-      <div class="inline-control">
-        <n-button @click="prevMonth">上月</n-button>
-        <strong class="calendar-label">{{ year }} 年 {{ month + 1 }} 月</strong>
-        <n-button @click="nextMonth">下月</n-button>
-      </div>
-    </section>
+    <PageHeader title="快照" description="点击已记录的日期查看详情，点击空白日期直接新建当天快照。">
+      <SnapshotViewSwitch current="calendar" />
+      <n-button type="primary" @click="router.push('/snapshots/new')">记录快照</n-button>
+    </PageHeader>
 
-    <section class="calendar-shell">
+    <n-card class="surface-panel">
+      <template #header>
+        <div class="cal-toolbar">
+          <n-button size="small" quaternary @click="prevMonth">‹</n-button>
+          <strong class="calendar-label">{{ year }} 年 {{ month + 1 }} 月</strong>
+          <n-button size="small" quaternary @click="nextMonth">›</n-button>
+          <n-button size="small" @click="goToday">今天</n-button>
+        </div>
+      </template>
+      <template #header-extra>
+        <span class="section-note">本月 {{ monthCount }} 次快照</span>
+      </template>
       <div class="cal-grid">
         <div v-for="w in weekDays" :key="w" class="cal-head">{{ w }}</div>
         <template v-for="(c, i) in cells" :key="i">
@@ -105,114 +138,150 @@ watch(
             v-else
             type="button"
             class="cal-cell cal-day"
-            :class="{ 'has-snap': snapshotDates.has(c.dateStr) }"
+            :class="{
+              'has-snap': snapshotDates.has(c.dateStr),
+              'is-today': c.dateStr === todayStr,
+              'is-future': c.dateStr > todayStr,
+            }"
             @click="onPick(c.dateStr)"
           >
             <span class="day-num">{{ c.day }}</span>
-            <span class="day-state">{{ snapshotDates.has(c.dateStr) ? '已记录' : '新建' }}</span>
+            <span v-if="snapshotDates.has(c.dateStr)" class="day-value">
+              {{ netWorthByDate[c.dateStr] != null ? compactMoney(netWorthByDate[c.dateStr]) : '已记录' }}
+            </span>
+            <span v-else class="day-add">+ 新建</span>
           </button>
         </template>
       </div>
-    </section>
-    <n-text depth="3">点击某日：有快照则进入详情，无快照则新建并预填日期。</n-text>
+    </n-card>
   </div>
 </template>
 
 <style scoped>
-.calendar-shell {
-  padding: 22px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 251, 248, 0.78));
-  box-shadow: var(--shadow-md);
+.cal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .calendar-label {
-  min-width: 120px;
+  min-width: 108px;
+  font-size: 15px;
+  font-weight: 600;
   text-align: center;
-  color: var(--text-1);
 }
 
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--line-soft);
+  gap: 1px;
 }
 
 .cal-head {
-  text-align: center;
-  font-size: 13px;
+  padding: 8px;
+  background: var(--surface-0);
   color: var(--text-3);
-  padding: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
 }
 
 .cal-cell {
-  min-height: 90px;
-  border-radius: 18px;
-  border: 1px solid var(--line-soft);
+  min-height: 88px;
+  background: var(--surface-1);
 }
 
 .cal-empty {
-  border: none;
+  background: var(--surface-0);
 }
 
 .cal-day {
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
   width: 100%;
-  padding: 14px;
+  padding: 10px;
+  border: 0;
   color: var(--text-1);
-  background: rgba(255, 255, 255, 0.58);
-  transition:
-    background 0.15s,
-    transform 0.15s,
-    border-color 0.15s;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .cal-day:hover {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: var(--line-strong);
-  transform: translateY(-1px);
-}
-
-.cal-day.has-snap {
-  border-color: rgba(31, 143, 120, 0.28);
-  background: linear-gradient(180deg, rgba(31, 143, 120, 0.14), rgba(255, 255, 255, 0.86));
+  background: var(--surface-hover);
 }
 
 .day-num {
-  font-weight: 600;
-  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
-.day-state {
-  font-size: 12px;
+.cal-day.is-today .day-num {
+  background: var(--text-1);
+  color: #ffffff;
+}
+
+.cal-day.is-future {
   color: var(--text-3);
 }
 
+.day-value {
+  align-self: stretch;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-add {
+  color: var(--text-3);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.cal-day:hover .day-add {
+  opacity: 1;
+}
+
 @media (max-width: 640px) {
-  .calendar-shell {
-    padding: 16px;
-  }
-
-  .cal-grid {
-    gap: 8px;
-  }
-
   .cal-cell {
-    min-height: 72px;
-    border-radius: 14px;
+    min-height: 56px;
   }
 
   .cal-day {
-    padding: 10px;
+    padding: 6px;
   }
 
-  .day-state {
-    display: none;
+  .day-value {
+    padding: 0;
+    background: none;
+    font-size: 0;
+  }
+
+  .day-value::after {
+    content: "";
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
   }
 }
 </style>
