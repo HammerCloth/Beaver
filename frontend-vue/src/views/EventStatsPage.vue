@@ -14,6 +14,7 @@ import { useCategoryColor } from '@/composables/useCategoryColor'
 import PageHeader from '@/components/PageHeader.vue'
 import StatStrip from '@/components/StatStrip.vue'
 import DonutBreakdown, { type DonutItem } from '@/components/DonutBreakdown.vue'
+import { t } from '@/i18n'
 
 provide(THEME_KEY, CHART_THEME)
 
@@ -32,9 +33,9 @@ const categoryFilter = ref<string | null>(null)
 const flowFilter = ref<'all' | 'out' | 'in'>('all')
 
 const flowOptions = [
-  { label: '全部收支', value: 'all' },
-  { label: '仅支出', value: 'out' },
-  { label: '仅收入', value: 'in' },
+  { label: t('events.flow.all'), value: 'all' },
+  { label: t('events.flow.out'), value: 'out' },
+  { label: t('events.flow.in'), value: 'in' },
 ]
 
 const categoryOptions = computed(() =>
@@ -57,14 +58,14 @@ const incomeTotal = computed(() => events.value.filter((e) => e.amount > 0).redu
 
 const columns: DataTableColumns<eventApi.EventItem> = [
   {
-    title: '日期',
+    title: t('events.columns.date'),
     key: 'date',
     width: 120,
     render: (row) =>
       h('button', { class: 'text-action', onClick: () => router.push(`/snapshots/${row.snapshotId}`) }, row.date),
   },
   {
-    title: '分类',
+    title: t('events.columns.category'),
     key: 'category',
     width: 140,
     render: (row) =>
@@ -73,16 +74,16 @@ const columns: DataTableColumns<eventApi.EventItem> = [
         settings.label(DIM_EVENT_CATEGORY, row.category),
       ]),
   },
-  { title: '说明', key: 'description', ellipsis: { tooltip: true }, render: (row) => row.description || '—' },
+  { title: t('events.columns.description'), key: 'description', ellipsis: { tooltip: true }, render: (row) => row.description || '—' },
   {
-    title: '收支',
+    title: t('events.columns.flow'),
     key: 'flow',
     width: 90,
     render: (row) =>
-      h('span', { class: ['badge', row.amount < 0 ? 'badge--down' : 'badge--up'] }, row.amount < 0 ? '支出' : '收入'),
+      h('span', { class: ['badge', row.amount < 0 ? 'badge--down' : 'badge--up'] }, row.amount < 0 ? t('events.flow.expense') : t('events.flow.income')),
   },
   {
-    title: '金额',
+    title: t('events.columns.amount'),
     key: 'amount',
     width: 130,
     align: 'right',
@@ -123,10 +124,10 @@ const stats = computed(() => {
   const count = Object.values(countByCategory.value).reduce((sum, n) => sum + n, 0)
   const top = [...items.value].sort((a, b) => b.value - a.value)[0]
   return [
-    { label: `${year.value} 年支出合计`, value: formatMoney(grandTotal.value) },
-    { label: '收入合计', value: formatMoney(incomeTotal.value), tone: incomeTotal.value > 0 ? ('positive' as const) : ('' as const) },
-    { label: '支出事件', value: count, unit: '笔' },
-    { label: '最大分类', value: top?.name ?? '—', hint: top ? formatMoney(top.value) : undefined },
+    { label: t('events.stats.yearTotal', { year: year.value }), value: formatMoney(grandTotal.value) },
+    { label: t('events.stats.incomeTotal'), value: formatMoney(incomeTotal.value), tone: incomeTotal.value > 0 ? ('positive' as const) : ('' as const) },
+    { label: t('events.stats.expenseEvents'), value: count, unit: t('events.stats.countUnit') || undefined },
+    { label: t('events.stats.topCategory'), value: top?.name ?? '—', hint: top ? formatMoney(top.value) : undefined },
   ]
 })
 
@@ -145,7 +146,7 @@ async function load() {
     grandTotal.value = data.grandTotal ?? 0
     countByCategory.value = data.countByCategory ?? {}
   } catch {
-    message.error('加载失败')
+    message.error(t('common.status.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -163,7 +164,7 @@ onMounted(load)
 
 <template>
   <div class="page-stack">
-    <PageHeader title="大事记" description="汇总快照中记录的年度支出事件，看钱主要花在了哪里。">
+    <PageHeader :title="t('events.title')" :description="t('events.description')">
       <n-button quaternary @click="shiftYear(-1)">‹</n-button>
       <n-input-number v-model:value="year" :input-props="{ inputmode: 'numeric' }" style="width: 84px; text-align: center" :min="2000" :max="2100" :show-button="false" />
       <n-button quaternary @click="shiftYear(1)">›</n-button>
@@ -172,25 +173,25 @@ onMounted(load)
     <n-spin :show="loading">
       <StatStrip :items="stats" />
 
-      <n-card class="surface-panel" title="按分类分布">
+      <n-card class="surface-panel" :title="t('events.byCategory')">
         <DonutBreakdown
           v-if="items.length"
           layout="split"
           bars
           :items="items"
-          center-label="支出合计"
-          :meta="(item) => (countByLabel[item.name] ? `${countByLabel[item.name]} 笔` : undefined)"
+          :center-label="t('events.expenseTotal')"
+          :meta="(item) => (countByLabel[item.name] ? t('events.countMeta', { n: countByLabel[item.name] }) : undefined)"
         />
-        <n-empty v-else-if="!loading" class="panel-empty" :description="`${year} 年还没有支出类大事记`" />
+        <n-empty v-else-if="!loading" class="panel-empty" :description="t('events.emptyYear', { year })" />
       </n-card>
 
       <n-card class="surface-panel surface-panel--flush">
         <template #header>
-          明细 <span class="section-note">· {{ filteredEvents.length }} 笔，合计 {{ formatSignedMoney(filteredNet) }}</span>
+          {{ t('events.detail') }} <span class="section-note">{{ t('events.detailSummary', { n: filteredEvents.length, amount: formatSignedMoney(filteredNet) }) }}</span>
         </template>
         <template #header-extra>
           <div class="filter-bar">
-            <n-select v-model:value="categoryFilter" size="small" clearable placeholder="全部分类" :options="categoryOptions" style="width: 132px" />
+            <n-select v-model:value="categoryFilter" size="small" clearable :placeholder="t('events.allCategories')" :options="categoryOptions" style="width: 132px" />
             <n-select v-model:value="flowFilter" size="small" :options="flowOptions" style="width: 112px" />
           </div>
         </template>
@@ -202,7 +203,7 @@ onMounted(load)
           :pagination="filteredEvents.length > 15 ? { pageSize: 15 } : false"
           :scroll-x="isMobile ? undefined : 720"
         />
-        <n-empty v-if="!loading && !filteredEvents.length" class="panel-empty" description="没有符合条件的大事记" />
+        <n-empty v-if="!loading && !filteredEvents.length" class="panel-empty" :description="t('events.emptyFiltered')" />
       </n-card>
     </n-spin>
   </div>

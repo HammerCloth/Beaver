@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { t } from '@/i18n'
 
 /** 快照的两种视图：日历（默认）与列表，放在两个页面的标题栏里互相切换 */
 const props = defineProps<{ current: 'calendar' | 'list' }>()
@@ -14,8 +15,8 @@ function onChange(value: string) {
 
 <template>
   <n-tabs :value="current" type="segment" size="small" class="view-switch" @update:value="onChange">
-    <n-tab name="calendar">日历</n-tab>
-    <n-tab name="list">列表</n-tab>
+    <n-tab name="calendar">{{ t('snapshots.viewSwitch.calendar') }}</n-tab>
+    <n-tab name="list">{{ t('snapshots.viewSwitch.list') }}</n-tab>
   </n-tabs>
 </template>
 

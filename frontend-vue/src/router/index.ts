@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { t } from '@/i18n'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -171,7 +172,7 @@ router.beforeEach(async (to) => {
   } catch (e) {
     console.error('router guard', e)
     auth.bootError =
-      (e as Error)?.message ?? '路由初始化失败'
+      (e as Error)?.message ?? t('auth.bootError.routerFailed')
     if (to.name === 'boot-error') {
       return true
     }

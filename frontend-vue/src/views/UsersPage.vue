@@ -7,6 +7,7 @@ import * as userApi from '@/api/user'
 import { mobileCardColumns } from '@/lib/mobileCard'
 import { useIsMobile } from '@/composables/useIsMobile'
 import PageHeader from '@/components/PageHeader.vue'
+import { t } from '@/i18n'
 
 const message = useMessage()
 const { isMobile } = useIsMobile()
@@ -26,7 +27,7 @@ onMounted(async () => {
   try {
     await load()
   } catch {
-    message.error('加载失败')
+    message.error(t('common.status.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -35,12 +36,12 @@ onMounted(async () => {
 async function create() {
   try {
     await userApi.createUser(newUser.value)
-    message.success('已创建')
+    message.success(t('common.status.created'))
     showCreate.value = false
     newUser.value = { username: '', password: '', isAdmin: false }
     await load()
   } catch {
-    message.error('创建失败')
+    message.error(t('users.createFailed'))
   }
 }
 
@@ -56,16 +57,16 @@ async function savePwd() {
   }
   try {
     await userApi.resetPassword(pwdTarget.value.id, newPwd.value)
-    message.success('密码已重置')
+    message.success(t('users.passwordReset'))
     showPwd.value = false
   } catch {
-    message.error('失败')
+    message.error(t('users.failed'))
   }
 }
 
 const columns: DataTableColumns<User> = [
   {
-    title: '用户',
+    title: t('users.columns.user'),
     key: 'username',
     render: (row) =>
       h('span', { class: 'cell-name' }, [
@@ -74,23 +75,23 @@ const columns: DataTableColumns<User> = [
       ]),
   },
   {
-    title: '角色',
+    title: t('users.columns.role'),
     key: 'is_admin',
-    render: (row) => h('span', { class: ['badge', row.is_admin ? 'badge--accent' : ''] }, row.is_admin ? '管理员' : '成员'),
+    render: (row) => h('span', { class: ['badge', row.is_admin ? 'badge--accent' : ''] }, row.is_admin ? t('common.role.admin') : t('common.role.member')),
   },
   {
-    title: '密码状态',
+    title: t('users.columns.passwordStatus'),
     key: 'must_change_password',
     render: (row) =>
       row.must_change_password
-        ? h('span', { class: 'badge badge--warning' }, '待首次改密')
-        : h('span', { class: 'badge badge--positive' }, '正常'),
+        ? h('span', { class: 'badge badge--warning' }, t('users.passwordStatus.mustChange'))
+        : h('span', { class: 'badge badge--positive' }, t('users.passwordStatus.normal')),
   },
   {
     title: '',
     key: 'a',
     align: 'right',
-    render: (row) => h('button', { class: 'text-action', onClick: () => openPwd(row) }, '重置密码'),
+    render: (row) => h('button', { class: 'text-action', onClick: () => openPwd(row) }, t('users.resetPassword')),
   },
 ]
 
@@ -99,25 +100,25 @@ const cardColumns = mobileCardColumns<User>((row) => ({
     h('span', { class: 'app-user__avatar' }, row.username.slice(0, 1).toUpperCase()),
     h('span', { class: 'cell-main' }, row.username),
   ]),
-  value: h('button', { class: 'text-action', onClick: () => openPwd(row) }, '重置密码'),
+  value: h('button', { class: 'text-action', onClick: () => openPwd(row) }, t('users.resetPassword')),
   meta: [
-    h('span', { class: ['badge', row.is_admin ? 'badge--accent' : ''] }, row.is_admin ? '管理员' : '成员'),
+    h('span', { class: ['badge', row.is_admin ? 'badge--accent' : ''] }, row.is_admin ? t('common.role.admin') : t('common.role.member')),
     row.must_change_password
-      ? h('span', { class: 'badge badge--warning' }, '待首次改密')
-      : h('span', { class: 'badge badge--positive' }, '正常'),
+      ? h('span', { class: 'badge badge--warning' }, t('users.passwordStatus.mustChange'))
+      : h('span', { class: 'badge badge--positive' }, t('users.passwordStatus.normal')),
   ],
 }))
 </script>
 
 <template>
   <div class="page-stack">
-    <PageHeader title="用户管理" description="创建成员账号、重置密码。新用户首次登录时需要修改密码。">
-      <n-button type="primary" @click="showCreate = true">新建用户</n-button>
+    <PageHeader :title="t('users.title')" :description="t('users.description')">
+      <n-button type="primary" @click="showCreate = true">{{ t('users.create') }}</n-button>
     </PageHeader>
     <n-spin :show="loading">
       <n-card class="surface-panel surface-panel--flush">
         <template #header>
-          全部用户 <span class="section-note">· {{ rows.length }} 人</span>
+          {{ t('users.allUsers') }} <span class="section-note">· {{ t('users.count', { n: rows.length }) }}</span>
         </template>
         <n-data-table
           :class="{ 'data-table--cards': isMobile }"
@@ -127,31 +128,31 @@ const cardColumns = mobileCardColumns<User>((row) => ({
         />
       </n-card>
     </n-spin>
-    <n-modal v-model:show="showCreate" preset="card" title="新建用户" style="width: 440px">
+    <n-modal v-model:show="showCreate" preset="card" :title="t('users.create')" style="width: 440px">
       <n-form>
-        <n-form-item label="用户名">
+        <n-form-item :label="t('users.fields.username')">
           <n-input v-model:value="newUser.username" />
         </n-form-item>
-        <n-form-item label="密码">
+        <n-form-item :label="t('users.fields.password')">
           <n-input v-model:value="newUser.password" type="password" show-password-on="click" />
         </n-form-item>
-        <n-form-item label="管理员">
+        <n-form-item :label="t('users.fields.admin')">
           <n-switch v-model:value="newUser.isAdmin" />
         </n-form-item>
       </n-form>
       <template #footer>
         <div class="modal-footer">
-          <n-button @click="showCreate = false">取消</n-button>
-          <n-button type="primary" @click="create">创建</n-button>
+          <n-button @click="showCreate = false">{{ t('common.actions.cancel') }}</n-button>
+          <n-button type="primary" @click="create">{{ t('users.submit') }}</n-button>
         </div>
       </template>
     </n-modal>
-    <n-modal v-model:show="showPwd" preset="card" title="重置密码" style="width: 400px">
-      <n-input v-model:value="newPwd" type="password" show-password-on="click" placeholder="新密码（至少 8 位）" />
+    <n-modal v-model:show="showPwd" preset="card" :title="t('users.resetPassword')" style="width: 400px">
+      <n-input v-model:value="newPwd" type="password" show-password-on="click" :placeholder="t('users.newPasswordPlaceholder')" />
       <template #footer>
         <div class="modal-footer">
-          <n-button @click="showPwd = false">取消</n-button>
-          <n-button type="primary" @click="savePwd">保存</n-button>
+          <n-button @click="showPwd = false">{{ t('common.actions.cancel') }}</n-button>
+          <n-button type="primary" @click="savePwd">{{ t('common.actions.save') }}</n-button>
         </div>
       </template>
     </n-modal>

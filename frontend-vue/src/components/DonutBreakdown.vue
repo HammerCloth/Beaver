@@ -6,6 +6,7 @@ import { PieChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { formatMoney } from '@/lib/format'
+import { t } from '@/i18n'
 
 use([CanvasRenderer, PieChart, TooltipComponent])
 
@@ -32,7 +33,7 @@ const props = withDefaults(
     /** 明细行附加说明，例如「3 笔」 */
     meta?: (item: DonutItem) => string | undefined
   }>(),
-  { centerLabel: '合计', centerValue: undefined, formatValue: formatMoney, layout: 'stack', bars: false, meta: undefined },
+  { centerLabel: () => t('components.donut.total'), centerValue: undefined, formatValue: formatMoney, layout: 'stack', bars: false, meta: undefined },
 )
 
 const rows = computed(() => {

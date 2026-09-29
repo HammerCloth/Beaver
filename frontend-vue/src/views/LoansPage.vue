@@ -5,6 +5,8 @@ import type { DataTableColumns } from 'naive-ui'
 import type { Loan, LoanRepayment } from '@/types/models'
 import * as loanApi from '@/api/loan'
 import { formatMoney } from '@/lib/format'
+import { localToday } from '@/lib/date'
+import { t } from '@/i18n'
 import { mobileCardColumns } from '@/lib/mobileCard'
 import { useIsMobile } from '@/composables/useIsMobile'
 import PageHeader from '@/components/PageHeader.vue'
@@ -33,11 +35,7 @@ const editingLoan = ref<Loan | null>(null)
 const detailLoan = ref<Loan | null>(null)
 const editingRepayment = ref<LoanRepayment | null>(null)
 
-/** 本地日期 YYYY-MM-DD（toISOString 是 UTC，东八区凌晨会差一天） */
-const today = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+const today = localToday
 
 const loanForm = ref<loanApi.LoanBody>({
   borrowerName: '',
@@ -54,9 +52,9 @@ const repaymentForm = ref<loanApi.RepaymentBody>({
 })
 
 const statusOptions = [
-  { label: '全部', value: 'all' },
-  { label: '未还清', value: 'open' },
-  { label: '已还清', value: 'settled' },
+  { label: t('loans.status.all'), value: 'all' },
+  { label: t('loans.status.open'), value: 'open' },
+  { label: t('loans.status.settled'), value: 'settled' },
 ]
 
 function isOverdue(row: Loan) {
@@ -64,9 +62,9 @@ function isOverdue(row: Loan) {
 }
 
 const statItems = computed(() => [
-  { label: '未还总额', value: formatMoney(stats.value.outstandingTotal), tone: stats.value.outstandingTotal > 0 ? ('warning' as const) : ('' as const) },
-  { label: '未还清', value: stats.value.openCount, unit: '笔' },
-  { label: `${stats.value.year} 年收回`, value: formatMoney(stats.value.repaidThisYear), tone: stats.value.repaidThisYear > 0 ? ('positive' as const) : ('' as const) },
+  { label: t('loans.stats.outstandingTotal'), value: formatMoney(stats.value.outstandingTotal), tone: stats.value.outstandingTotal > 0 ? ('warning' as const) : ('' as const) },
+  { label: t('loans.stats.openCount'), value: stats.value.openCount, unit: t('common.unit.items') },
+  { label: t('loans.stats.repaidInYear', { year: stats.value.year }), value: formatMoney(stats.value.repaidThisYear), tone: stats.value.repaidThisYear > 0 ? ('positive' as const) : ('' as const) },
 ])
 
 function progressCell(row: Loan) {
@@ -81,24 +79,24 @@ function progressCell(row: Loan) {
 
 function statusBadge(row: Loan) {
   if (row.settled) {
-    return h('span', { class: 'badge badge--positive' }, '已还清')
+    return h('span', { class: 'badge badge--positive' }, t('loans.status.settled'))
   }
   return isOverdue(row)
-    ? h('span', { class: 'badge badge--negative' }, '已逾期')
-    : h('span', { class: 'badge badge--warning' }, '未还清')
+    ? h('span', { class: 'badge badge--negative' }, t('loans.status.overdue'))
+    : h('span', { class: 'badge badge--warning' }, t('loans.status.open'))
 }
 
 function loanActions(row: Loan) {
   return [
-    h('button', { class: 'text-action', onClick: () => openLoanDetail(row.id) }, '还款'),
-    h('button', { class: 'text-action', onClick: () => openEditLoan(row) }, '编辑'),
-    h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteLoan(row) }, '删除'),
+    h('button', { class: 'text-action', onClick: () => openLoanDetail(row.id) }, t('loans.actions.repay')),
+    h('button', { class: 'text-action', onClick: () => openEditLoan(row) }, t('common.actions.edit')),
+    h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteLoan(row) }, t('common.actions.delete')),
   ]
 }
 
 const loanColumns: DataTableColumns<Loan> = [
   {
-    title: '借款人',
+    title: t('loans.columns.borrower'),
     key: 'borrower_name',
     minWidth: 140,
     render: (row) =>
@@ -107,29 +105,29 @@ const loanColumns: DataTableColumns<Loan> = [
         row.relationship ? h('span', { class: 'cell-muted' }, row.relationship) : null,
       ]),
   },
-  { title: '借款日', key: 'loan_date', width: 112, render: (row) => h('span', { class: 'cell-muted' }, row.loan_date) },
+  { title: t('loans.columns.loanDate'), key: 'loan_date', width: 112, render: (row) => h('span', { class: 'cell-muted' }, row.loan_date) },
   {
-    title: '约定还日',
+    title: t('loans.columns.dueDate'),
     key: 'due_date',
     width: 112,
     render: (row) => h('span', { class: isOverdue(row) ? 'text-danger' : 'cell-muted' }, row.due_date || '—'),
   },
-  { title: '本金', key: 'amount', width: 110, align: 'right', render: (row) => h('span', { class: 'amount' }, formatMoney(row.amount)) },
+  { title: t('loans.columns.principal'), key: 'amount', width: 110, align: 'right', render: (row) => h('span', { class: 'amount' }, formatMoney(row.amount)) },
   {
-    title: '还款进度',
+    title: t('loans.columns.progress'),
     key: 'repaid_total',
     width: 170,
     render: progressCell,
   },
   {
-    title: '剩余',
+    title: t('loans.columns.remaining'),
     key: 'remaining',
     width: 110,
     align: 'right',
     render: (row) => h('span', { class: ['amount', row.remaining > 0 ? '' : 'amount--muted'] }, formatMoney(row.remaining)),
   },
   {
-    title: '状态',
+    title: t('loans.columns.status'),
     key: 'settled',
     width: 96,
     render: statusBadge,
@@ -137,7 +135,7 @@ const loanColumns: DataTableColumns<Loan> = [
   {
     title: '',
     key: 'actions',
-    width: 160,
+    width: 200,
     align: 'right',
     render: (row) => h('div', { class: 'table-actions' }, loanActions(row)),
   },
@@ -149,14 +147,14 @@ const loanCardColumns = mobileCardColumns<Loan>((row) => ({
     row.relationship ? h('span', { class: 'cell-muted' }, row.relationship) : null,
   ],
   value: [
-    h('span', { class: 'cell-muted' }, '剩余 '),
+    h('span', { class: 'cell-muted' }, `${t('loans.card.remaining')} `),
     h('span', { class: ['amount', row.remaining > 0 ? '' : 'amount--muted'] }, formatMoney(row.remaining)),
   ],
   meta: [
     statusBadge(row),
-    `借 ${row.loan_date}`,
-    row.due_date ? h('span', { class: isOverdue(row) ? 'text-danger' : '' }, `约定 ${row.due_date}`) : null,
-    `本金 ${formatMoney(row.amount)}`,
+    t('loans.card.loanDate', { date: row.loan_date }),
+    row.due_date ? h('span', { class: isOverdue(row) ? 'text-danger' : '' }, t('loans.card.dueDate', { date: row.due_date })) : null,
+    t('loans.card.principal', { amount: formatMoney(row.amount) }),
   ],
   extra: progressCell(row),
   actions: loanActions(row),
@@ -178,7 +176,7 @@ async function load() {
       }
     }
   } catch {
-    message.error('加载借款数据失败')
+    message.error(t('loans.toast.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -220,34 +218,34 @@ async function saveLoan() {
   try {
     if (editingLoan.value) {
       await loanApi.updateLoan(editingLoan.value.id, loanForm.value)
-      message.success('借款已更新')
+      message.success(t('loans.toast.loanUpdated'))
     } else {
       await loanApi.createLoan(loanForm.value)
-      message.success('借款已记录')
+      message.success(t('loans.toast.loanCreated'))
     }
     loanModalOpen.value = false
     await load()
   } catch (error) {
-    message.error(apiMessage(error, '保存失败'))
+    message.error(apiMessage(error, t('common.status.saveFailed')))
   }
 }
 
 function confirmDeleteLoan(row: Loan) {
   dialog.warning({
-    title: '删除借款',
-    content: `确定删除借给 ${row.borrower_name} 的 ${formatMoney(row.amount)} 吗？关联的还款记录会一并删除。`,
-    positiveText: '删除',
-    negativeText: '取消',
+    title: t('loans.dialog.deleteLoanTitle'),
+    content: t('loans.dialog.deleteLoanContent', { name: row.borrower_name, amount: formatMoney(row.amount) }),
+    positiveText: t('common.actions.delete'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       try {
         await loanApi.deleteLoan(row.id)
         if (detailLoan.value?.id === row.id) {
           detailLoan.value = null
         }
-        message.success('已删除')
+        message.success(t('common.status.deleted'))
         await load()
       } catch {
-        message.error('删除失败')
+        message.error(t('loans.toast.deleteFailed'))
       }
     },
   })
@@ -263,7 +261,7 @@ async function refreshDetail(id: string) {
     detailLoan.value = await loanApi.getLoan(id)
   } catch {
     detailLoan.value = null
-    message.error('加载还款记录失败')
+    message.error(t('loans.toast.repaymentsLoadFailed'))
   }
 }
 
@@ -281,15 +279,15 @@ async function saveRepayment() {
   try {
     if (editingRepayment.value) {
       await loanApi.updateRepayment(detailLoan.value.id, editingRepayment.value.id, repaymentForm.value)
-      message.success('还款记录已更新')
+      message.success(t('loans.toast.repaymentUpdated'))
     } else {
       await loanApi.createRepayment(detailLoan.value.id, repaymentForm.value)
-      message.success('已登记一笔还款')
+      message.success(t('loans.toast.repaymentCreated'))
     }
     await load()
     resetRepaymentForm()
   } catch (error) {
-    message.error(apiMessage(error, '保存失败'))
+    message.error(apiMessage(error, t('common.status.saveFailed')))
   }
 }
 
@@ -297,18 +295,18 @@ function confirmDeleteRepayment(row: LoanRepayment) {
   if (!detailLoan.value) return
   const loanId = detailLoan.value.id
   dialog.warning({
-    title: '删除还款记录',
-    content: `确定删除 ${row.repay_date} 的 ${formatMoney(row.amount)} 还款吗？`,
-    positiveText: '删除',
-    negativeText: '取消',
+    title: t('loans.dialog.deleteRepaymentTitle'),
+    content: t('loans.dialog.deleteRepaymentContent', { date: row.repay_date, amount: formatMoney(row.amount) }),
+    positiveText: t('common.actions.delete'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       try {
         await loanApi.deleteRepayment(loanId, row.id)
-        message.success('已删除')
+        message.success(t('common.status.deleted'))
         await load()
         resetRepaymentForm()
       } catch {
-        message.error('删除失败')
+        message.error(t('loans.toast.deleteFailed'))
       }
     },
   })
@@ -322,19 +320,19 @@ function apiMessage(error: unknown, fallback: string) {
 
 <template>
   <div class="page-stack">
-    <PageHeader title="借款" description="记录别人向我们借的钱，按批次登记还款；借款不计入资产快照。">
-      <n-button type="primary" @click="openCreateLoan">新增借款</n-button>
+    <PageHeader :title="t('loans.title')" :description="t('loans.description')">
+      <n-button type="primary" @click="openCreateLoan">{{ t('loans.newLoan') }}</n-button>
     </PageHeader>
 
     <div class="filter-bar">
       <n-select v-model:value="status" class="filter-bar__fixed" :options="statusOptions" />
-      <n-input v-model:value="keyword" class="filter-bar__grow" clearable placeholder="搜索借款人、关系或备注" @keyup.enter="onSearch">
+      <n-input v-model:value="keyword" class="filter-bar__grow" clearable :placeholder="t('loans.searchPlaceholder')" @keyup.enter="onSearch">
         <template #prefix>
           <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         </template>
       </n-input>
       <n-input-number v-model:value="year" :input-props="{ inputmode: 'numeric' }" class="filter-bar__year" :min="2000" :max="2100" />
-      <n-button @click="onSearch">筛选</n-button>
+      <n-button @click="onSearch">{{ t('common.actions.filter') }}</n-button>
     </div>
 
     <n-spin :show="loading">
@@ -342,43 +340,43 @@ function apiMessage(error: unknown, fallback: string) {
 
       <n-card class="surface-panel surface-panel--flush">
         <template #header>
-          借款明细 <span class="section-note">· {{ loans.length }} 笔</span>
+          {{ t('loans.listTitle') }} <span class="section-note">· {{ t('loans.recordCount', { n: loans.length }) }}</span>
         </template>
         <n-data-table
           :class="{ 'data-table--cards': isMobile }"
           :columns="isMobile ? loanCardColumns : loanColumns"
           :data="loans"
           :row-key="(row: Loan) => row.id"
-          :scroll-x="isMobile ? undefined : 1040"
+          :scroll-x="isMobile ? undefined : 1080"
         />
-        <n-empty v-if="!loading && !loans.length" class="panel-empty" description="还没有符合条件的借款记录" />
+        <n-empty v-if="!loading && !loans.length" class="panel-empty" :description="t('loans.empty')" />
       </n-card>
     </n-spin>
 
-    <n-modal v-model:show="loanModalOpen" preset="card" :title="editingLoan ? '编辑借款' : '新增借款'" style="width: 520px">
+    <n-modal v-model:show="loanModalOpen" preset="card" :title="editingLoan ? t('loans.editLoan') : t('loans.newLoan')" style="width: 520px">
       <n-form label-placement="left" label-width="90">
-        <n-form-item label="借款人" required>
-          <n-input v-model:value="loanForm.borrowerName" placeholder="谁向我们借的钱" />
+        <n-form-item :label="t('loans.columns.borrower')" required>
+          <n-input v-model:value="loanForm.borrowerName" :placeholder="t('loans.form.borrowerPlaceholder')" />
         </n-form-item>
-        <n-form-item label="关系">
-          <n-input v-model:value="loanForm.relationship" placeholder="例如：亲戚、同事、朋友" />
+        <n-form-item :label="t('loans.form.relationship')">
+          <n-input v-model:value="loanForm.relationship" :placeholder="t('loans.form.relationshipPlaceholder')" />
         </n-form-item>
-        <n-form-item label="本金" required>
+        <n-form-item :label="t('loans.columns.principal')" required>
           <n-input-number v-model:value="loanForm.amount" :input-props="{ inputmode: 'decimal' }" :min="0.01" :precision="2" style="width: 100%">
             <template #prefix>¥</template>
           </n-input-number>
         </n-form-item>
-        <n-form-item label="借款日" required>
+        <n-form-item :label="t('loans.columns.loanDate')" required>
           <n-date-picker v-model:formatted-value="loanForm.loanDate" value-format="yyyy-MM-dd" type="date" style="width: 100%" />
         </n-form-item>
-        <n-form-item label="约定还日">
+        <n-form-item :label="t('loans.columns.dueDate')">
           <n-date-picker v-model:formatted-value="loanForm.dueDate" value-format="yyyy-MM-dd" type="date" clearable style="width: 100%" />
         </n-form-item>
-        <n-form-item label="备注">
+        <n-form-item :label="t('loans.form.note')">
           <n-input v-model:value="loanForm.note" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" />
         </n-form-item>
       </n-form>
-      <template #footer><div class="modal-footer"><n-button @click="loanModalOpen = false">取消</n-button><n-button type="primary" @click="saveLoan">保存</n-button></div></template>
+      <template #footer><div class="modal-footer"><n-button @click="loanModalOpen = false">{{ t('common.actions.cancel') }}</n-button><n-button type="primary" @click="saveLoan">{{ t('common.actions.save') }}</n-button></div></template>
     </n-modal>
 
     <n-drawer :show="Boolean(detailLoan)" :width="460" placement="right" @update:show="(show: boolean) => { if (!show) detailLoan = null }">
@@ -386,39 +384,39 @@ function apiMessage(error: unknown, fallback: string) {
         <div class="drawer-badges">
           <span v-if="detailLoan.relationship" class="badge badge--plain">{{ detailLoan.relationship }}</span>
           <span class="badge" :class="detailLoan.settled ? 'badge--positive' : 'badge--warning'">
-            {{ detailLoan.settled ? '已还清' : '未还清' }}
+            {{ detailLoan.settled ? t('loans.status.settled') : t('loans.status.open') }}
           </span>
         </div>
         <div class="drawer-stats">
-          <div><span>本金</span><strong>{{ formatMoney(detailLoan.amount) }}</strong></div>
-          <div><span>已还</span><strong>{{ formatMoney(detailLoan.repaid_total) }}</strong></div>
-          <div><span>剩余</span><strong>{{ formatMoney(detailLoan.remaining) }}</strong></div>
+          <div><span>{{ t('loans.columns.principal') }}</span><strong>{{ formatMoney(detailLoan.amount) }}</strong></div>
+          <div><span>{{ t('loans.drawer.repaid') }}</span><strong>{{ formatMoney(detailLoan.repaid_total) }}</strong></div>
+          <div><span>{{ t('loans.columns.remaining') }}</span><strong>{{ formatMoney(detailLoan.remaining) }}</strong></div>
         </div>
-        <p v-if="detailLoan.due_date" class="section-note">约定还日 {{ detailLoan.due_date }}</p>
+        <p v-if="detailLoan.due_date" class="section-note">{{ t('loans.drawer.dueDate', { date: detailLoan.due_date }) }}</p>
         <p v-if="detailLoan.note" class="loan-note">{{ detailLoan.note }}</p>
 
-        <h3 class="loan-drawer-title">{{ editingRepayment ? '编辑还款' : '登记还款' }}</h3>
+        <h3 class="loan-drawer-title">{{ editingRepayment ? t('loans.drawer.editRepayment') : t('loans.drawer.addRepayment') }}</h3>
         <n-form label-placement="left" label-width="76">
-          <n-form-item label="金额" required>
+          <n-form-item :label="t('loans.drawer.amount')" required>
             <n-input-number v-model:value="repaymentForm.amount" :input-props="{ inputmode: 'decimal' }" :min="0.01" :precision="2" :max="detailLoan.remaining + (editingRepayment?.amount ?? 0)" style="width: 100%">
               <template #prefix>¥</template>
             </n-input-number>
           </n-form-item>
-          <n-form-item label="还款日" required>
+          <n-form-item :label="t('loans.drawer.repayDate')" required>
             <n-date-picker v-model:formatted-value="repaymentForm.repayDate" value-format="yyyy-MM-dd" type="date" style="width: 100%" />
           </n-form-item>
-          <n-form-item label="备注">
-            <n-input v-model:value="repaymentForm.note" placeholder="例如：第一次还款、微信转账" />
+          <n-form-item :label="t('loans.form.note')">
+            <n-input v-model:value="repaymentForm.note" :placeholder="t('loans.drawer.repaymentNotePlaceholder')" />
           </n-form-item>
         </n-form>
         <n-space>
           <n-button type="primary" :disabled="detailLoan.settled && !editingRepayment" @click="saveRepayment">
-            {{ editingRepayment ? '保存修改' : '登记还款' }}
+            {{ editingRepayment ? t('loans.drawer.saveChanges') : t('loans.drawer.addRepayment') }}
           </n-button>
-          <n-button v-if="editingRepayment" @click="resetRepaymentForm()">取消编辑</n-button>
+          <n-button v-if="editingRepayment" @click="resetRepaymentForm()">{{ t('loans.drawer.cancelEdit') }}</n-button>
         </n-space>
 
-        <h3 class="loan-drawer-title">分批还款</h3>
+        <h3 class="loan-drawer-title">{{ t('loans.drawer.repaymentsTitle') }}</h3>
         <div class="loan-repayment-list">
           <div v-for="item in detailLoan.repayments" :key="item.id" class="loan-repayment-row">
             <div>
@@ -427,11 +425,11 @@ function apiMessage(error: unknown, fallback: string) {
               <p v-if="item.note" class="loan-note">{{ item.note }}</p>
             </div>
             <n-space size="small">
-              <n-button size="small" @click="resetRepaymentForm(item)">编辑</n-button>
-              <n-button size="small" quaternary type="error" @click="confirmDeleteRepayment(item)">删除</n-button>
+              <n-button size="small" @click="resetRepaymentForm(item)">{{ t('common.actions.edit') }}</n-button>
+              <n-button size="small" quaternary type="error" @click="confirmDeleteRepayment(item)">{{ t('common.actions.delete') }}</n-button>
             </n-space>
           </div>
-          <n-empty v-if="!detailLoan.repayments?.length" description="还没有还款记录，可按批次登记" style="padding: 20px 0" />
+          <n-empty v-if="!detailLoan.repayments?.length" :description="t('loans.drawer.repaymentsEmpty')" style="padding: 20px 0" />
         </div>
       </n-drawer-content>
     </n-drawer>

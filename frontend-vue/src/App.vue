@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NConfigProvider, NDialogProvider, NMessageProvider, zhCN, dateZhCN } from 'naive-ui'
+import { NConfigProvider, NDialogProvider, NMessageProvider, zhCN, dateZhCN, enUS, dateEnUS } from 'naive-ui'
+import { currentLocale } from '@/i18n'
+
+const isEn = currentLocale() === 'en-US'
+const naiveLocale = isEn ? enUS : zhCN
+const naiveDateLocale = isEn ? dateEnUS : dateZhCN
 
 const themeOverrides = computed(() => ({
   common: {
@@ -115,7 +120,7 @@ const themeOverrides = computed(() => ({
 </script>
 
 <template>
-  <n-config-provider :locale="zhCN" :date-locale="dateZhCN" :theme-overrides="themeOverrides">
+  <n-config-provider :locale="naiveLocale" :date-locale="naiveDateLocale" :theme-overrides="themeOverrides">
     <n-message-provider>
       <n-dialog-provider>
         <router-view />

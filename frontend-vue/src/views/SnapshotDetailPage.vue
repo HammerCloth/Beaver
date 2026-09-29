@@ -5,6 +5,7 @@ import { useDialog, useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { SnapshotDetail } from '@/types/models'
 import * as snapshotApi from '@/api/snapshot'
+import { t } from '@/i18n'
 import * as fxApi from '@/api/fx'
 import { fxSourceText, type FxQuote } from '@/api/fx'
 import { amountTone, formatMoney, formatSignedMoney } from '@/lib/format'
@@ -56,12 +57,14 @@ const netWorth = computed(() => items.value.reduce((sum, it) => sum + effectiveB
 const eventNet = computed(() => eventRows.value.reduce((sum, ev) => sum + ev.amount, 0))
 
 const stats = computed(() => [
-  { label: '净资产', value: formatMoney(netWorth.value) },
-  { label: '账户', value: items.value.length, unit: '个' },
+  { label: t('snapshots.detail.stats.netWorth'), value: formatMoney(netWorth.value) },
+  { label: t('snapshots.detail.stats.accounts'), value: items.value.length, unit: t('common.unit.accounts') },
   {
-    label: '大事记净额',
+    label: t('snapshots.detail.stats.eventNet'),
     value: eventRows.value.length ? formatSignedMoney(eventNet.value) : '—',
-    hint: eventRows.value.length ? `${eventRows.value.length} 笔` : '无',
+    hint: eventRows.value.length
+      ? t('snapshots.detail.stats.eventCount', { n: eventRows.value.length })
+      : t('snapshots.detail.stats.none'),
     tone: amountTone(eventNet.value),
   },
   ...FOREIGN_CURRENCIES.map((c) => {
@@ -69,7 +72,7 @@ const stats = computed(() => [
     const used = snap.value?.items.some((it) => it.currency === c)
     const rate = used ? snap.value?.fxRates?.[c] : (fxQuotes.value[c]?.rate ?? undefined)
     return {
-      label: `${currencyLabel(c)}汇率`,
+      label: t('snapshots.detail.stats.fxRate', { currency: currencyLabel(c) }),
       value: rate != null ? rate.toFixed(4) : '—',
       hint: `${c}/CNY · ${fxSourceText(fxQuotes.value[c])}`,
     }
@@ -107,7 +110,7 @@ function balanceCell(row: Item) {
 
 const itemColumns: DataTableColumns<Item> = [
   {
-    title: '账户',
+    title: t('snapshots.detail.columns.account'),
     key: 'accountName',
     render: (row) =>
       h('span', { class: 'cell-name' }, [
@@ -116,17 +119,17 @@ const itemColumns: DataTableColumns<Item> = [
       ]),
   },
   {
-    title: '类型',
+    title: t('snapshots.detail.columns.type'),
     key: 'type',
     render: (row) => h('span', { class: 'cell-muted' }, settings.label(DIM_ACCOUNT_TYPE, row.type ?? '')),
   },
   {
-    title: '归属',
+    title: t('snapshots.detail.columns.owner'),
     key: 'owner',
     render: (row) => h('span', { class: 'cell-muted' }, settings.label(DIM_ACCOUNT_OWNER, row.owner ?? '')),
   },
   {
-    title: '余额',
+    title: t('snapshots.detail.columns.balance'),
     key: 'balance',
     align: 'right',
     render: balanceCell,
@@ -144,7 +147,7 @@ const itemCardColumns = mobileCardColumns<Item>((row) => ({
 
 const eventColumns: DataTableColumns<EventRow> = [
   {
-    title: '分类',
+    title: t('snapshots.detail.columns.category'),
     key: 'category',
     render: (row) =>
       h('span', { class: 'cell-name' }, [
@@ -152,15 +155,15 @@ const eventColumns: DataTableColumns<EventRow> = [
         settings.label(DIM_EVENT_CATEGORY, row.category),
       ]),
   },
-  { title: '说明', key: 'description', render: (row) => row.description || '—' },
+  { title: t('snapshots.detail.columns.description'), key: 'description', render: (row) => row.description || '—' },
   {
-    title: '收支',
+    title: t('snapshots.detail.columns.flow'),
     key: 'flow',
     render: (row) =>
-      h('span', { class: ['badge', row.amount < 0 ? 'badge--down' : 'badge--up'] }, row.amount < 0 ? '支出' : '收入'),
+      h('span', { class: ['badge', row.amount < 0 ? 'badge--down' : 'badge--up'] }, row.amount < 0 ? t('snapshots.flow.out') : t('snapshots.flow.in')),
   },
   {
-    title: '金额',
+    title: t('snapshots.detail.columns.amount'),
     key: 'amount',
     align: 'right',
     render: (row) =>
@@ -196,7 +199,7 @@ watch(
         })
         .catch(() => {})
     } catch {
-      message.error('加载失败')
+      message.error(t('common.status.loadFailed'))
       snap.value = null
     } finally {
       loading.value = false
@@ -211,13 +214,13 @@ function onEdit() {
 
 function onDelete() {
   dialog.warning({
-    title: '删除快照',
-    content: `删除 ${snap.value?.date ?? ''} 的快照后无法恢复，确定继续？`,
-    positiveText: '删除',
-    negativeText: '取消',
+    title: t('snapshots.detail.deleteTitle'),
+    content: t('snapshots.detail.deleteContent', { date: snap.value?.date ?? '' }),
+    positiveText: t('common.actions.delete'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       await snapshotApi.deleteSnapshot(id.value)
-      message.success('已删除')
+      message.success(t('common.status.deleted'))
       await router.replace('/snapshots')
     },
   })
@@ -227,24 +230,24 @@ function onDelete() {
 <template>
   <n-spin :show="loading">
     <div v-if="snap" class="page-stack">
-      <PageHeader :title="`${snap.date} 快照`">
+      <PageHeader :title="t('snapshots.detail.title', { date: snap.date })">
         <template #eyebrow>
-          <button type="button" class="page-back" @click="router.push('/snapshots')">← 快照日历</button>
+          <button type="button" class="page-back" @click="router.push('/snapshots')">{{ t('snapshots.detail.back') }}</button>
         </template>
         <template #description>
           <span class="meta-line">
-            <span>记录于 {{ snap.createdAt }}</span>
-            <span v-if="snap.note">备注：{{ snap.note }}</span>
+            <span>{{ t('snapshots.detail.recordedAt', { time: snap.createdAt }) }}</span>
+            <span v-if="snap.note">{{ t('snapshots.detail.note', { note: snap.note }) }}</span>
           </span>
         </template>
-        <n-button @click="onEdit">编辑</n-button>
-        <n-button secondary type="error" @click="onDelete">删除</n-button>
+        <n-button @click="onEdit">{{ t('common.actions.edit') }}</n-button>
+        <n-button secondary type="error" @click="onDelete">{{ t('common.actions.delete') }}</n-button>
       </PageHeader>
 
       <StatStrip :items="stats" />
 
       <section class="bento">
-        <n-card class="bento__span-8 surface-panel surface-panel--flush" title="账户余额">
+        <n-card class="bento__span-8 surface-panel surface-panel--flush" :title="t('snapshots.detail.balances')">
           <n-data-table
             :class="{ 'data-table--cards': isMobile }"
             :columns="isMobile ? itemCardColumns : itemColumns"
@@ -252,11 +255,11 @@ function onDelete() {
             :row-key="(row: Item) => row.accountId"
           />
         </n-card>
-        <n-card class="bento__span-4 surface-panel" title="资产构成">
-          <DonutBreakdown v-if="typeBreakdown.length" :items="typeBreakdown" center-label="总资产" />
-          <n-empty v-else class="panel-empty" description="没有正资产" />
+        <n-card class="bento__span-4 surface-panel" :title="t('snapshots.detail.composition')">
+          <DonutBreakdown v-if="typeBreakdown.length" :items="typeBreakdown" :center-label="t('snapshots.detail.totalAssets')" />
+          <n-empty v-else class="panel-empty" :description="t('snapshots.detail.noPositive')" />
         </n-card>
-        <n-card class="bento__span-12 surface-panel surface-panel--flush" title="大事记">
+        <n-card class="bento__span-12 surface-panel surface-panel--flush" :title="t('snapshots.detail.events')">
           <n-data-table
             v-if="eventRows.length"
             :class="{ 'data-table--cards': isMobile }"
@@ -264,7 +267,7 @@ function onDelete() {
             :data="eventRows"
             :row-key="(row: EventRow) => row.id"
           />
-          <n-empty v-else class="panel-empty" description="这次快照没有记录大事记" />
+          <n-empty v-else class="panel-empty" :description="t('snapshots.detail.noEvents')" />
         </n-card>
       </section>
     </div>

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import type { AxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { currentLocale, switchLocale, t } from '@/i18n'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +16,10 @@ const username = ref('')
 const password = ref('')
 const remember = ref(true)
 const loading = ref(false)
+
+// 按钮显示另一种语言的名称，点击后切换（会整页刷新）
+const otherLocale = currentLocale() === 'zh-CN' ? 'en-US' : 'zh-CN'
+const otherLocaleName = otherLocale === 'zh-CN' ? '中文' : 'English'
 
 function safeRedirect() {
   const raw = route.query.redirect
@@ -31,13 +36,13 @@ async function submit() {
     await auth.login(username.value.trim(), password.value, remember.value)
   } catch (err) {
     const error = err as AxiosError<{ error?: string }>
-    message.error(error.response?.data?.error || '登录失败，请检查用户名、密码或本地代理配置')
+    message.error(error.response?.data?.error || t('auth.login.failed'))
     loading.value = false
     return
   }
 
   try {
-    message.success('登录成功')
+    message.success(t('auth.login.success'))
     const redirect = safeRedirect()
     await router.replace(redirect)
   } catch {
@@ -53,59 +58,81 @@ async function submit() {
   <div class="login-shell">
     <div class="login-wrap">
       <section class="login-hero">
-        <span class="login-hero__badge">Beaver · 河狸</span>
-        <h1 class="login-hero__title">把资产变化、账户结构和年度事件放到同一个视角。</h1>
+        <span class="login-hero__badge">{{ t('auth.login.hero.badge') }}</span>
+        <h1 class="login-hero__title">{{ t('auth.login.hero.title') }}</h1>
         <p class="login-hero__desc">
-          更清楚地看净资产走势、账户构成和时间节点，桌面端和手机端都能快速进入核心数据。
+          {{ t('auth.login.hero.desc') }}
         </p>
         <div class="login-hero__highlights">
           <div class="login-hero__tile">
-            <strong>净资产追踪</strong>
-            <span>集中查看阶段涨跌和长期趋势。</span>
+            <strong>{{ t('auth.login.hero.highlights.netWorth.title') }}</strong>
+            <span>{{ t('auth.login.hero.highlights.netWorth.desc') }}</span>
           </div>
           <div class="login-hero__tile">
-            <strong>账户拆解</strong>
-            <span>按账户、类型与归属快速切换观察。</span>
+            <strong>{{ t('auth.login.hero.highlights.accounts.title') }}</strong>
+            <span>{{ t('auth.login.hero.highlights.accounts.desc') }}</span>
           </div>
           <div class="login-hero__tile">
-            <strong>手机兼容</strong>
-            <span>外出时也能直接查看关键数字。</span>
+            <strong>{{ t('auth.login.hero.highlights.mobile.title') }}</strong>
+            <span>{{ t('auth.login.hero.highlights.mobile.desc') }}</span>
           </div>
         </div>
       </section>
 
       <section class="login-card">
+        <n-button
+          class="login-card__lang"
+          quaternary
+          size="small"
+          :title="t('auth.login.switchLanguage')"
+          @click="switchLocale(otherLocale)"
+        >
+          {{ otherLocaleName }}
+        </n-button>
         <div class="login-card__brand">
           <BrandMark :size="36" />
           <div class="login-card__brand-text">
             <strong>Beaver</strong>
-            <span class="section-note">个人资产看板</span>
+            <span class="section-note">{{ t('common.appTagline') }}</span>
           </div>
         </div>
-        <h2 class="login-card__title">登录</h2>
-        <p class="login-card__desc">输入账号后进入你的财务工作台。</p>
+        <h2 class="login-card__title">{{ t('auth.login.title') }}</h2>
+        <p class="login-card__desc">{{ t('auth.login.desc') }}</p>
         <n-form @submit.prevent="submit">
-          <n-form-item label="用户名">
-            <n-input v-model:value="username" placeholder="请输入用户名" />
+          <n-form-item :label="t('auth.login.username')">
+            <n-input v-model:value="username" :placeholder="t('auth.login.usernamePlaceholder')" />
           </n-form-item>
-          <n-form-item label="密码">
+          <n-form-item :label="t('auth.login.password')">
             <n-input
               v-model:value="password"
               type="password"
               show-password-on="click"
-              placeholder="请输入密码"
+              :placeholder="t('auth.login.passwordPlaceholder')"
             />
           </n-form-item>
           <div class="login-card__actions">
-            <span class="section-note">保持登录状态可减少重复验证。</span>
+            <span class="section-note">{{ t('auth.login.rememberHint') }}</span>
             <n-switch v-model:value="remember">
-              <template #checked>记住我</template>
-              <template #unchecked>记住我</template>
+              <template #checked>{{ t('auth.login.rememberMe') }}</template>
+              <template #unchecked>{{ t('auth.login.rememberMe') }}</template>
             </n-switch>
           </div>
-          <n-button type="primary" block :loading="loading" attr-type="submit">登录</n-button>
+          <n-button type="primary" block :loading="loading" attr-type="submit">{{ t('auth.login.submit') }}</n-button>
         </n-form>
       </section>
     </div>
   </div>
 </template>
+
+<style scoped>
+.login-card {
+  position: relative;
+}
+
+.login-card__lang {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--text-3);
+}
+</style>

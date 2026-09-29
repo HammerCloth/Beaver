@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "entries": {
+    "79a93d4a2f8f50b95f852280616242fee1855dc99a3c75211917f55e72e95fae": {
+      "last_emitted_at_ms": 1790679942429,
+      "message": "Use parallel execution for independent tasks. Use run_in_background for long operations (npm install, builds, tests)."
+    },
+    "445ed27a3872b681d98190bae61ccb84954e1bc4e140df5370be958dee776b3a": {
+      "last_emitted_at_ms": 1790679147007,
+      "message": "Verify changes work after editing. Test functionality before marking complete."
+    },
+    "466399dafa2d20f60587180bad0a07358eb7f2bce724df0ff682f038ad33f5ad": {
+      "last_emitted_at_ms": 1790679013041,
+      "message": "Read multiple files in parallel when possible for faster analysis."
+    },
+    "74068241ca31001ed15b2f007638401d62087754e26847663d466c6b30222310": {
+      "last_emitted_at_ms": 1790678999932,
+      "message": "Spawning agent: oh-my-claudecode:executor (opus) [BACKGROUND] | Task: i18n: accounts, auth, admin pages | Active agents: 1"
+    },
+    "aa54ec641755555cfee9691c0187bf322ac592c321d112c6fabf6e5ef1a60799": {
+      "last_emitted_at_ms": 1790678992119,
+      "message": "[SLOP WARNING] Detected fallback/workaround language in this tool input. Do not make potential slop: avoid ad-hoc fallback layers, workaround shims, or environment-specific patches unless explicitly justified. For architecture concerns, consult the architect for a concrete design first. If this seems environment-specific, ask the user to confirm constraints before proceeding.\n\nSpawning agent: oh-my-claudecode:executor (opus) [BACKGROUND] | Task: i18n: snapshot pages and FX | Active agents: 1"
+    },
+    "f7267d4a4dc44f03f016fc4f848ffa413e88e19c5d82944e4982eabf407e11e4": {
+      "last_emitted_at_ms": 1790678983623,
+      "message": "Spawning agent: oh-my-claudecode:executor (opus) [BACKGROUND] | Task: i18n: dashboard and events | Active agents: 1"
+    },
+    "a80f00a5626ffeafcdf9fc2f801056e3110daa1f1ea71ccb0dab8c0087787e95": {
+      "last_emitted_at_ms": 1790678978788,
+      "message": "Spawning agent: oh-my-claudecode:executor (opus) [BACKGROUND] | Task: i18n: loans and gifts pages | Active agents: 1"
+    },
+    "19e561f2a34d32bb53c8869590268c7952b6789d1eca893a679d6ff2c40dac37": {
+      "last_emitted_at_ms": 1790678948975,
+      "message": "Spawning agent: oh-my-claudecode:executor (opus) [BACKGROUND] | Task: Rewrite demo seed script"
+    }
+  },
+  "updated_at": "2026-09-29T11:05:42.429Z"
+}

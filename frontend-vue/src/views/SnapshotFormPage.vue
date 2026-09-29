@@ -6,6 +6,7 @@ import type { Account } from '@/types/models'
 import * as accountApi from '@/api/account'
 import * as snapshotApi from '@/api/snapshot'
 import * as fxApi from '@/api/fx'
+import { t } from '@/i18n'
 import { fxSourceText, type FxQuote } from '@/api/fx'
 import { DIM_ACCOUNT_OWNER, DIM_ACCOUNT_TYPE, DIM_EVENT_CATEGORY, useSettingsStore } from '@/stores/settings'
 import { amountTone, formatMoney, formatSignedMoney } from '@/lib/format'
@@ -78,11 +79,11 @@ const currencyOptions = CURRENCIES.map((c) => ({ label: c.code, value: c.code })
 
 function fxHint(c: ForeignCurrency) {
   const q = fxQuotes.value[c]
-  if (fxEdited.value[c]) return '已手动修改'
-  if (fxLoading.value) return '获取中…'
-  if (!q || q.rate == null) return '所有汇率源均不可用，请手动填写'
-  if (q.fallback) return `汇率源暂不可用，沿用 ${q.rateDate} 的汇率`
-  return `来源：${fxSourceText(q)}`
+  if (fxEdited.value[c]) return t('snapshots.form.fxHint.edited')
+  if (fxLoading.value) return t('snapshots.form.fxHint.loading')
+  if (!q || q.rate == null) return t('snapshots.form.fxHint.unavailable')
+  if (q.fallback) return t('snapshots.form.fxHint.fallback', { date: q.rateDate })
+  return t('snapshots.form.fxHint.source', { source: fxSourceText(q) })
 }
 
 let fxRequestSeq = 0
@@ -104,7 +105,7 @@ async function loadFxRates() {
   } catch {
     if (seq === fxRequestSeq) {
       fxQuotes.value = {}
-      message.warning('汇率获取失败，请手动填写')
+      message.warning(t('snapshots.form.errors.fxFetchFailed'))
     }
   } finally {
     if (seq === fxRequestSeq) {
@@ -222,7 +223,7 @@ function signedAmount(row: { absAmount: number | null; flow: Flow }) {
 
 async function submit() {
   if (!date.value) {
-    message.error('请选择日期')
+    message.error(t('snapshots.form.errors.dateRequired'))
     return
   }
   const items = accounts.value.map((a) => ({
@@ -231,14 +232,14 @@ async function submit() {
     currency: currencyOf(a),
   }))
   if (items.some((i) => i.balance === null || Number.isNaN(i.balance as number))) {
-    message.error('请为每个账户填写余额')
+    message.error(t('snapshots.form.errors.balanceRequired'))
     return
   }
   const rates: snapshotApi.SnapshotFxRatesInput = {}
   for (const c of usedForeign.value) {
     const r = fxRates.value[c]
     if (r == null || !(r > 0)) {
-      message.error(`请填写${currencyLabel(c)}汇率`)
+      message.error(t('snapshots.form.errors.rateRequired', { currency: currencyLabel(c) }))
       return
     }
     if (fxEdited.value[c]) {
@@ -251,7 +252,7 @@ async function submit() {
     return (hasText && !hasAmount) || (hasAmount && !hasText)
   })
   if (incomplete) {
-    message.error('请把大事记的说明和金额都填完整')
+    message.error(t('snapshots.form.errors.eventIncomplete'))
     return
   }
   const evs = events.value
@@ -271,7 +272,7 @@ async function submit() {
         events: evs,
         fxRates: rates,
       })
-      message.success('已保存')
+      message.success(t('common.status.saved'))
       await router.replace(`/snapshots/${idParam.value}`)
     } else {
       const s = await snapshotApi.createSnapshot({
@@ -281,11 +282,11 @@ async function submit() {
         events: evs,
         fxRates: rates,
       })
-      message.success('已创建')
+      message.success(t('common.status.created'))
       await router.replace(`/snapshots/${s.id}`)
     }
   } catch {
-    message.error('保存失败（日期重复或未填余额等）')
+    message.error(t('snapshots.form.errors.saveFailed'))
   } finally {
     loading.value = false
   }
@@ -304,7 +305,7 @@ onMounted(async () => {
   try {
     await load()
   } catch {
-    message.error('加载失败')
+    message.error(t('common.status.loadFailed'))
     return
   }
   // 新建和编辑都按快照日期取汇率：该日已记录的汇率直接返回，没有则获取当天汇率
@@ -315,23 +316,23 @@ onMounted(async () => {
 
 <template>
   <div class="page-stack snapshot-form">
-    <PageHeader :title="isEdit ? '编辑快照' : '记录快照'">
+    <PageHeader :title="isEdit ? t('snapshots.form.editTitle') : t('snapshots.newSnapshot')">
       <template #eyebrow>
-        <button type="button" class="page-back" @click="goBack">← 返回</button>
+        <button type="button" class="page-back" @click="goBack">{{ t('snapshots.form.back') }}</button>
       </template>
       <template #description>
-        <template v-if="!isEdit && previousDate">余额已按 {{ previousDate }} 的快照预填，只需修改有变化的账户。</template>
-        <template v-else>填写这一天每个账户的余额，负债账户直接填欠款金额。</template>
+        <template v-if="!isEdit && previousDate">{{ t('snapshots.form.prefilledHint', { date: previousDate }) }}</template>
+        <template v-else>{{ t('snapshots.form.defaultHint') }}</template>
       </template>
     </PageHeader>
 
-    <n-card class="surface-panel" title="基本信息">
+    <n-card class="surface-panel" :title="t('snapshots.form.basicInfo')">
       <div class="form-grid">
-        <n-form-item label="快照日期" :show-feedback="false">
+        <n-form-item :label="t('snapshots.form.date')" :show-feedback="false">
           <n-date-picker v-model:formatted-value="date" type="date" value-format="yyyy-MM-dd" style="width: 100%" />
         </n-form-item>
-        <n-form-item label="备注" :show-feedback="false">
-          <n-input v-model:value="note" placeholder="可选，例如：年终奖到账、基金调仓" />
+        <n-form-item :label="t('snapshots.form.note')" :show-feedback="false">
+          <n-input v-model:value="note" :placeholder="t('snapshots.form.notePlaceholder')" />
         </n-form-item>
       </div>
       <div v-if="usedForeign.length" class="fx-rates">
@@ -345,7 +346,7 @@ onMounted(async () => {
             :show-button="false"
             :min="0"
             :status="fxRates[c] == null ? 'warning' : undefined"
-            placeholder="汇率"
+            :placeholder="t('snapshots.form.ratePlaceholder')"
           >
             <template #suffix>CNY</template>
           </n-input-number>
@@ -356,7 +357,7 @@ onMounted(async () => {
 
     <n-card class="surface-panel surface-panel--flush">
       <template #header>
-        账户余额 <span class="section-note">· 已填 {{ filledCount }}/{{ accounts.length }}</span>
+        {{ t('snapshots.form.balances') }} <span class="section-note">{{ t('snapshots.form.filled', { filled: filledCount, total: accounts.length }) }}</span>
       </template>
       <div v-for="group in groups" :key="group.type" class="balance-group">
         <div class="balance-group__head">
@@ -369,10 +370,10 @@ onMounted(async () => {
             <span class="cell-muted">{{ settings.label(DIM_ACCOUNT_OWNER, a.owner) }}</span>
           </div>
           <span class="balance-row__prev">
-            <template v-if="previousRaw[a.id]">上次 {{ formatMoney(previousRaw[a.id].balance, previousRaw[a.id].currency) }}</template>
+            <template v-if="previousRaw[a.id]">{{ t('snapshots.form.previous', { amount: formatMoney(previousRaw[a.id].balance, previousRaw[a.id].currency) }) }}</template>
           </span>
           <span class="balance-row__delta amount" :class="accountDelta(a) ? `amount--${amountTone(accountDelta(a) ?? 0)}` : 'amount--muted'">
-            <template v-if="accountDelta(a) !== null">{{ accountDelta(a) ? formatSignedMoney(accountDelta(a) ?? 0) : '无变化' }}</template>
+            <template v-if="accountDelta(a) !== null">{{ accountDelta(a) ? formatSignedMoney(accountDelta(a) ?? 0) : t('snapshots.form.noChange') }}</template>
           </span>
           <div class="balance-row__input">
             <n-input-group>
@@ -402,36 +403,36 @@ onMounted(async () => {
 
     <n-card class="surface-panel">
       <template #header>
-        大事记 <span class="section-note">· 这段时间的重要收支，可选</span>
+        {{ t('snapshots.form.events') }} <span class="section-note">{{ t('snapshots.form.eventsNote') }}</span>
       </template>
       <div v-if="events.length" class="event-list">
         <div v-for="(ev, i) in events" :key="i" class="event-row">
           <n-select v-model:value="ev.category" :options="categorySelectOptions" />
-          <n-input v-model:value="ev.description" placeholder="说明，例如：换手机" />
+          <n-input v-model:value="ev.description" :placeholder="t('snapshots.form.eventDescPlaceholder')" />
           <n-radio-group v-model:value="ev.flow">
-            <n-radio-button value="out">支出</n-radio-button>
-            <n-radio-button value="in">收入</n-radio-button>
+            <n-radio-button value="out">{{ t('snapshots.flow.out') }}</n-radio-button>
+            <n-radio-button value="in">{{ t('snapshots.flow.in') }}</n-radio-button>
           </n-radio-group>
-          <n-input-number v-model:value="ev.absAmount" :input-props="{ inputmode: 'decimal' }" placeholder="金额" :min="0" :show-button="false">
+          <n-input-number v-model:value="ev.absAmount" :input-props="{ inputmode: 'decimal' }" :placeholder="t('snapshots.form.amountPlaceholder')" :min="0" :show-button="false">
             <template #prefix>¥</template>
           </n-input-number>
-          <n-button quaternary type="error" @click="removeEvent(i)">移除</n-button>
+          <n-button quaternary type="error" @click="removeEvent(i)">{{ t('snapshots.form.remove') }}</n-button>
         </div>
       </div>
-      <n-button dashed block :style="events.length ? 'margin-top: 12px' : ''" @click="addEvent">+ 添加大事记</n-button>
+      <n-button dashed block :style="events.length ? 'margin-top: 12px' : ''" @click="addEvent">{{ t('snapshots.form.addEvent') }}</n-button>
     </n-card>
 
     <div class="action-bar">
       <div class="action-bar__summary">
-        <span>净资产 <strong>{{ formatMoney(netWorth) }}</strong></span>
+        <span>{{ t('snapshots.form.summary.netWorth') }} <strong>{{ formatMoney(netWorth) }}</strong></span>
         <span v-if="hasPrevious" :class="`amount--${amountTone(netWorth - previousNetWorth)}`">
-          较上次 {{ formatSignedMoney(netWorth - previousNetWorth) }}
+          {{ t('snapshots.form.summary.vsLast') }} {{ formatSignedMoney(netWorth - previousNetWorth) }}
         </span>
-        <span v-if="events.length">大事记 {{ formatSignedMoney(eventNet) }}</span>
+        <span v-if="events.length">{{ t('snapshots.form.summary.events') }} {{ formatSignedMoney(eventNet) }}</span>
       </div>
       <div class="inline-control">
-        <n-button @click="goBack">取消</n-button>
-        <n-button type="primary" :loading="loading" @click="submit">{{ isEdit ? '保存修改' : '保存快照' }}</n-button>
+        <n-button @click="goBack">{{ t('common.actions.cancel') }}</n-button>
+        <n-button type="primary" :loading="loading" @click="submit">{{ isEdit ? t('snapshots.form.saveChanges') : t('snapshots.form.saveSnapshot') }}</n-button>
       </div>
     </div>
   </div>
@@ -576,6 +577,11 @@ onMounted(async () => {
 
   .balance-row__currency {
     width: 72px;
+  }
+
+  /* 币种已在左侧下拉框中显示，窄屏上省掉金额前的符号，给 HK$ 等较长币种的数字留出空间 */
+  .balance-row__input :deep(.n-input__prefix) {
+    display: none;
   }
 
   .fx-rate__input {

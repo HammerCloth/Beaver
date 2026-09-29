@@ -7,6 +7,7 @@ import type { OAuthClientAuthorization } from '@/api/oauth'
 import { mobileCardColumns } from '@/lib/mobileCard'
 import { useIsMobile } from '@/composables/useIsMobile'
 import PageHeader from '@/components/PageHeader.vue'
+import { t } from '@/i18n'
 
 type Row = OAuthClientAuthorization
 
@@ -35,12 +36,12 @@ function formatTime(value: string | null) {
 }
 
 function statusBadge(row: Row) {
-  return h('span', { class: ['badge', row.active ? 'badge--positive' : ''] }, row.active ? '有效' : '已失效')
+  return h('span', { class: ['badge', row.active ? 'badge--positive' : ''] }, row.active ? t('aiClients.status.active') : t('aiClients.status.inactive'))
 }
 
 function revokeAction(row: Row) {
   return row.active
-    ? h('button', { class: 'text-action text-action--danger', onClick: () => revoke(row) }, '撤销')
+    ? h('button', { class: 'text-action text-action--danger', onClick: () => revoke(row) }, t('common.actions.revoke'))
     : null
 }
 
@@ -48,32 +49,32 @@ const muted = (text: string | null, fallback = '—') => h('span', { class: 'cel
 
 const columns: DataTableColumns<Row> = [
   {
-    title: '客户端',
+    title: t('aiClients.columns.client'),
     key: 'clientName',
-    render: (row) => h('span', { class: 'cell-main' }, row.clientName || 'AI 客户端'),
+    render: (row) => h('span', { class: 'cell-main' }, row.clientName || t('aiClients.defaultName')),
   },
   {
-    title: '权限',
+    title: t('aiClients.columns.scope'),
     key: 'scope',
     render: (row) => h('code', { class: 'scope-code' }, row.scope),
   },
-  { title: '首次授权', key: 'authorizedAt', render: (row) => muted(formatTime(row.authorizedAt)) },
-  { title: '最后使用', key: 'lastUsedAt', render: (row) => muted(formatTime(row.lastUsedAt), '尚未使用') },
-  { title: '过期时间', key: 'expiresAt', render: (row) => muted(formatTime(row.expiresAt)) },
-  { title: '状态', key: 'active', render: statusBadge },
+  { title: t('aiClients.columns.authorizedAt'), key: 'authorizedAt', render: (row) => muted(formatTime(row.authorizedAt)) },
+  { title: t('aiClients.columns.lastUsedAt'), key: 'lastUsedAt', render: (row) => muted(formatTime(row.lastUsedAt), t('aiClients.neverUsed')) },
+  { title: t('aiClients.columns.expiresAt'), key: 'expiresAt', render: (row) => muted(formatTime(row.expiresAt)) },
+  { title: t('aiClients.columns.status'), key: 'active', render: statusBadge },
   { title: '', key: 'actions', width: 80, align: 'right', render: revokeAction },
 ]
 
 const cardColumns = mobileCardColumns<Row>((row) => {
   const action = revokeAction(row)
   return {
-    title: h('span', { class: 'cell-main' }, row.clientName || 'AI 客户端'),
+    title: h('span', { class: 'cell-main' }, row.clientName || t('aiClients.defaultName')),
     value: statusBadge(row),
     meta: [
       h('code', { class: 'scope-code' }, row.scope),
-      `最后使用 ${formatTime(row.lastUsedAt) ?? '尚未使用'}`,
-      `首次授权 ${formatTime(row.authorizedAt) ?? '—'}`,
-      row.active && row.expiresAt ? `${formatTime(row.expiresAt)} 过期` : null,
+      t('aiClients.meta.lastUsed', { time: formatTime(row.lastUsedAt) ?? t('aiClients.neverUsed') }),
+      t('aiClients.meta.authorized', { time: formatTime(row.authorizedAt) ?? '—' }),
+      row.active && row.expiresAt ? t('aiClients.meta.expires', { time: formatTime(row.expiresAt) }) : null,
     ],
     actions: action ? [action] : [],
   }
@@ -90,13 +91,13 @@ async function refresh() {
 
 function revoke(row: Row) {
   dialog.warning({
-    title: '撤销 AI 客户端',
-    content: `撤销后 ${row.clientName || '该客户端'} 需要重新授权才能访问 MCP。`,
-    positiveText: '撤销',
-    negativeText: '取消',
+    title: t('aiClients.revokeDialog.title'),
+    content: t('aiClients.revokeDialog.content', { name: row.clientName || t('aiClients.thisClient') }),
+    positiveText: t('common.actions.revoke'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       await oauthApi.revokeClientAuthorization(row.clientId)
-      message.success('已撤销')
+      message.success(t('aiClients.revoked'))
       await refresh()
     },
   })
@@ -104,38 +105,38 @@ function revoke(row: Row) {
 
 function revokeAll() {
   dialog.warning({
-    title: '撤销全部 AI 客户端',
-    content: '所有 AI 客户端都需要重新授权后才能访问 MCP。',
-    positiveText: '全部撤销',
-    negativeText: '取消',
+    title: t('aiClients.revokeAllDialog.title'),
+    content: t('aiClients.revokeAllDialog.content'),
+    positiveText: t('aiClients.revokeAll'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       await oauthApi.revokeAllAuthorizations()
-      message.success('已全部撤销')
+      message.success(t('aiClients.allRevoked'))
       await refresh()
     },
   })
 }
 
 onMounted(() => {
-  refresh().catch(() => message.error('加载失败'))
+  refresh().catch(() => message.error(t('common.status.loadFailed')))
 })
 </script>
 
 <template>
   <div class="page-stack">
-    <PageHeader title="AI 客户端" description="通过 MCP 授权访问你数据的 AI Agent。不再使用的客户端请及时撤销。">
-      <n-button @click="refresh">刷新</n-button>
-      <n-button secondary type="error" :disabled="activeRows.length === 0" @click="revokeAll">全部撤销</n-button>
+    <PageHeader :title="t('aiClients.title')" :description="t('aiClients.description')">
+      <n-button @click="refresh">{{ t('common.actions.refresh') }}</n-button>
+      <n-button secondary type="error" :disabled="activeRows.length === 0" @click="revokeAll">{{ t('aiClients.revokeAll') }}</n-button>
     </PageHeader>
 
     <n-card class="surface-panel surface-panel--flush">
       <template #header>
-        已授权客户端 <span class="section-note">· {{ activeRows.length }} 个</span>
+        {{ t('aiClients.authorizedClients') }} <span class="section-note">· {{ t('aiClients.count', { n: activeRows.length }) }}</span>
       </template>
       <template v-if="inactiveCount" #header-extra>
         <label class="inactive-toggle">
           <n-switch v-model:value="showInactive" size="small" />
-          显示已失效（{{ inactiveCount }}）
+          {{ t('aiClients.showInactive', { n: inactiveCount }) }}
         </label>
       </template>
       <n-data-table

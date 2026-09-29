@@ -1,4 +1,5 @@
 import type { ForeignCurrency } from '@/lib/currency'
+import { t, te } from '@/i18n'
 import http from './http'
 
 export interface FxQuote {
@@ -15,10 +16,12 @@ export interface FxQuote {
 
 /** 汇率来源的简短说明，例如「欧洲央行」「手动填写」 */
 export function fxSourceText(q: FxQuote | undefined) {
-  if (!q || q.rate == null) return '暂无汇率'
-  if (q.source === 'MANUAL') return '手动填写'
-  const label = q.providerLabel ?? '自动获取'
-  return q.fallback ? `${label} · 沿用 ${q.rateDate}` : label
+  if (!q || q.rate == null) return t('fx.source.none')
+  if (q.source === 'MANUAL') return t('fx.source.manual')
+  // 后端 providerLabel 是中文，按数据源枚举取当前语言的名称，未知数据源再退回后端文案
+  const key = q.provider ? `fx.provider.${q.provider}` : ''
+  const label = key && te(key) ? t(key) : (q.providerLabel ?? t('fx.source.auto'))
+  return q.fallback ? t('fx.source.fallback', { label, date: q.rateDate }) : label
 }
 
 export async function getFxRates(date: string) {

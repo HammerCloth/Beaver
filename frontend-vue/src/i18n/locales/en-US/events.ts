@@ -1,0 +1,33 @@
+export default {
+  title: 'Events',
+  description: 'Yearly spending events recorded in snapshots, showing where the money went.',
+  flow: {
+    all: 'All flows',
+    out: 'Expenses only',
+    in: 'Income only',
+    expense: 'Expense',
+    income: 'Income',
+  },
+  columns: {
+    date: 'Date',
+    category: 'Category',
+    description: 'Description',
+    flow: 'Flow',
+    amount: 'Amount',
+  },
+  stats: {
+    yearTotal: '{year} total spending',
+    incomeTotal: 'Total income',
+    expenseEvents: 'Expense events',
+    countUnit: '',
+    topCategory: 'Top category',
+  },
+  byCategory: 'By category',
+  expenseTotal: 'Total spending',
+  countMeta: '{n} record | {n} records',
+  emptyYear: 'No spending events in {year} yet',
+  detail: 'Details',
+  detailSummary: '· {n} record, total {amount} | · {n} records, total {amount}',
+  allCategories: 'All categories',
+  emptyFiltered: 'No events match the filters',
+}

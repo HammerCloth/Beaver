@@ -1,0 +1,33 @@
+export default {
+  title: '大事记',
+  description: '汇总快照中记录的年度支出事件，看钱主要花在了哪里。',
+  flow: {
+    all: '全部收支',
+    out: '仅支出',
+    in: '仅收入',
+    expense: '支出',
+    income: '收入',
+  },
+  columns: {
+    date: '日期',
+    category: '分类',
+    description: '说明',
+    flow: '收支',
+    amount: '金额',
+  },
+  stats: {
+    yearTotal: '{year} 年支出合计',
+    incomeTotal: '收入合计',
+    expenseEvents: '支出事件',
+    countUnit: '笔',
+    topCategory: '最大分类',
+  },
+  byCategory: '按分类分布',
+  expenseTotal: '支出合计',
+  countMeta: '{n} 笔',
+  emptyYear: '{year} 年还没有支出类大事记',
+  detail: '明细',
+  detailSummary: '· {n} 笔，合计 {amount}',
+  allCategories: '全部分类',
+  emptyFiltered: '没有符合条件的大事记',
+}

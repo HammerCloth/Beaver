@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import * as snapshotApi from '@/api/snapshot'
 import { formatMoney } from '@/lib/format'
+import { currentLocale, t } from '@/i18n'
 import PageHeader from '@/components/PageHeader.vue'
 import SnapshotViewSwitch from '@/components/SnapshotViewSwitch.vue'
 
@@ -40,9 +41,33 @@ const monthSnapshots = computed(() =>
   [...snapshotDates.value].sort((a, b) => b.localeCompare(a)).map((date) => ({ date, netWorth: netWorthByDate.value[date] })),
 )
 
+/** 格子里的紧凑金额：中文按「万」，英文按 K / M */
 function compactMoney(v: number) {
-  return Math.abs(v) >= 10000 ? `¥${(v / 10000).toFixed(2)}万` : formatMoney(v)
+  const abs = Math.abs(v)
+  // 负号放在货币符号前面：-¥1.2万 / -¥1.2M，而不是 ¥-1.2万
+  const sign = v < 0 ? '-' : ''
+  if (currentLocale() === 'zh-CN') {
+    return abs >= 10000 ? sign + t('snapshots.calendar.compact.tenThousand', { value: (abs / 10000).toFixed(2) }) : formatMoney(v)
+  }
+  if (abs >= 999_500) {
+    return sign + t('snapshots.calendar.compact.million', { value: (abs / 1_000_000).toFixed(1) })
+  }
+  return abs >= 10000 ? sign + t('snapshots.calendar.compact.thousand', { value: Math.round(abs / 1000) }) : formatMoney(v)
 }
+
+const monthNameFormat = new Intl.DateTimeFormat(currentLocale(), { month: 'long' })
+const monthTitle = computed(() =>
+  t('snapshots.calendar.monthTitle', {
+    year: year.value,
+    month: month.value + 1,
+    monthName: monthNameFormat.format(viewMonth.value),
+  }),
+)
+const monthCountText = computed(() =>
+  monthCount.value === 1
+    ? t('snapshots.calendar.monthCountOne')
+    : t('snapshots.calendar.monthCount', { n: monthCount.value }),
+)
 
 function goToday() {
   viewMonth.value = firstOfMonth(new Date())
@@ -80,7 +105,7 @@ const cells = computed(() => {
   return out
 })
 
-const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+const weekDays = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map((d) => t(`snapshots.calendar.weekdays.${d}`))
 
 async function onPick(dateStr: string) {
   try {
@@ -91,7 +116,7 @@ async function onPick(dateStr: string) {
       await router.push({ path: '/snapshots/new', query: { date: dateStr } })
     }
   } catch {
-    message.error('加载失败')
+    message.error(t('common.status.loadFailed'))
   }
 }
 
@@ -110,7 +135,7 @@ function nextMonth() {
 watch(
   viewMonth,
   () => {
-    loadMonth().catch(() => message.error('加载日历失败'))
+    loadMonth().catch(() => message.error(t('snapshots.calendar.loadFailed')))
   },
   { immediate: true },
 )
@@ -118,22 +143,22 @@ watch(
 
 <template>
   <div class="page-stack">
-    <PageHeader title="快照" description="点击已记录的日期查看详情，点击空白日期直接新建当天快照。">
+    <PageHeader :title="t('snapshots.title')" :description="t('snapshots.calendar.description')">
       <SnapshotViewSwitch current="calendar" />
-      <n-button type="primary" @click="router.push('/snapshots/new')">记录快照</n-button>
+      <n-button type="primary" @click="router.push('/snapshots/new')">{{ t('snapshots.newSnapshot') }}</n-button>
     </PageHeader>
 
     <n-card class="surface-panel">
       <template #header>
         <div class="cal-toolbar">
           <n-button size="small" quaternary @click="prevMonth">‹</n-button>
-          <strong class="calendar-label">{{ year }} 年 {{ month + 1 }} 月</strong>
+          <strong class="calendar-label">{{ monthTitle }}</strong>
           <n-button size="small" quaternary @click="nextMonth">›</n-button>
-          <n-button size="small" @click="goToday">今天</n-button>
+          <n-button size="small" @click="goToday">{{ t('snapshots.calendar.today') }}</n-button>
         </div>
       </template>
       <template #header-extra>
-        <span class="section-note">本月 {{ monthCount }} 次快照</span>
+        <span class="section-note">{{ monthCountText }}</span>
       </template>
       <div class="cal-grid">
         <div v-for="w in weekDays" :key="w" class="cal-head">{{ w }}</div>
@@ -152,19 +177,19 @@ watch(
           >
             <span class="day-num">{{ c.day }}</span>
             <span v-if="snapshotDates.has(c.dateStr)" class="day-value">
-              {{ netWorthByDate[c.dateStr] != null ? compactMoney(netWorthByDate[c.dateStr]) : '已记录' }}
+              {{ netWorthByDate[c.dateStr] != null ? compactMoney(netWorthByDate[c.dateStr]) : t('snapshots.calendar.recorded') }}
             </span>
-            <span v-else class="day-add">+ 新建</span>
+            <span v-else class="day-add">{{ t('snapshots.calendar.add') }}</span>
           </button>
         </template>
       </div>
       <div class="cal-month-list">
-        <div class="cal-month-list__title">本月快照</div>
+        <div class="cal-month-list__title">{{ t('snapshots.calendar.monthList') }}</div>
         <button v-for="s in monthSnapshots" :key="s.date" type="button" class="cal-month-list__item" @click="onPick(s.date)">
           <span class="cell-main">{{ s.date }}</span>
-          <span class="amount">{{ s.netWorth != null ? formatMoney(s.netWorth) : '已记录' }}</span>
+          <span class="amount">{{ s.netWorth != null ? formatMoney(s.netWorth) : t('snapshots.calendar.recorded') }}</span>
         </button>
-        <p v-if="!monthSnapshots.length" class="cal-month-list__empty">本月还没有快照，点击日期即可新建</p>
+        <p v-if="!monthSnapshots.length" class="cal-month-list__empty">{{ t('snapshots.calendar.monthEmpty') }}</p>
       </div>
     </n-card>
   </div>
@@ -179,6 +204,7 @@ watch(
 
 .calendar-label {
   min-width: 108px;
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 600;
   text-align: center;
@@ -278,6 +304,20 @@ watch(
 }
 
 @media (max-width: 640px) {
+  /* 标题栏在窄屏换行：月份切换一行，「本月 N 次快照」另起一行，避免英文互相重叠 */
+  .surface-panel :deep(.n-card-header) {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .surface-panel :deep(.n-card-header__main) {
+    flex-basis: 100%;
+  }
+
+  .surface-panel :deep(.n-card-header__extra) {
+    margin-left: 0;
+  }
+
   .cal-cell {
     min-height: 44px;
   }

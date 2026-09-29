@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as authApi from '@/api/auth'
 import type { User } from '@/types/models'
+import { t } from '@/i18n'
 
 export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref<string | null>(localStorage.getItem('access_token'))
@@ -41,8 +42,7 @@ export const useAuthStore = defineStore('auth', () => {
         }
       }
     } catch {
-      bootError.value =
-        '请求 /api/v1/auth/status 失败（网络错误、后端未启动或跨域被拦截）。请确认后端已监听 8080，且 Vite 代理 /api 可用。'
+      bootError.value = t('auth.bootError.statusFailed')
       needsSetup.value = false
       user.value = null
     } finally {

@@ -6,6 +6,7 @@ import type { Account } from '@/types/models'
 import * as accountApi from '@/api/account'
 import { DIM_ACCOUNT_OWNER, DIM_ACCOUNT_TYPE, useSettingsStore } from '@/stores/settings'
 import PageHeader from '@/components/PageHeader.vue'
+import { t } from '@/i18n'
 import { useCategoryColor } from '@/composables/useCategoryColor'
 
 const message = useMessage()
@@ -29,7 +30,7 @@ onMounted(async () => {
   try {
     await load()
   } catch {
-    message.error('加载失败')
+    message.error(t('common.status.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -38,9 +39,9 @@ onMounted(async () => {
 async function onDragEnd() {
   try {
     await accountApi.reorderAccounts(list.value.map((a) => a.id))
-    message.success('排序已保存')
+    message.success(t('accounts.sortSaved'))
   } catch {
-    message.error('排序失败')
+    message.error(t('accounts.sortFailed'))
     await load()
   }
 }
@@ -61,45 +62,45 @@ async function saveAccount() {
   try {
     if (editing.value) {
       await accountApi.updateAccount(editing.value.id, form.value)
-      message.success('已更新')
+      message.success(t('common.status.updated'))
     } else {
       await accountApi.createAccount(form.value)
-      message.success('已创建')
+      message.success(t('common.status.created'))
     }
     showModal.value = false
     await load()
   } catch {
-    message.error('保存失败')
+    message.error(t('common.status.saveFailed'))
   }
 }
 
 async function deactivate(row: Account) {
   try {
     await accountApi.deactivateAccount(row.id)
-    message.success('已停用')
+    message.success(t('accounts.deactivated'))
     await load()
   } catch {
-    message.error('操作失败')
+    message.error(t('common.status.operationFailed'))
   }
 }
 </script>
 
 <template>
   <div class="page-stack">
-    <PageHeader title="账户" description="拖动左侧手柄调整顺序，顺序会同步到快照录入和各类图表。">
-      <n-button type="primary" @click="openCreate">新建账户</n-button>
+    <PageHeader :title="t('accounts.title')" :description="t('accounts.description')">
+      <n-button type="primary" @click="openCreate">{{ t('accounts.create') }}</n-button>
     </PageHeader>
 
     <n-spin :show="loading">
       <n-card class="surface-panel surface-panel--flush">
         <template #header>
-          全部账户 <span class="section-note">· {{ list.length }} 个</span>
+          {{ t('accounts.allAccounts') }} <span class="section-note">· {{ t('accounts.count', { n: list.length }) }}</span>
         </template>
         <draggable v-model="list" item-key="id" handle=".drag-handle" class="draggable-list" @end="onDragEnd">
           <template #item="{ element }">
             <div class="account-row">
               <div class="account-row__main">
-                <span class="drag-handle" title="拖动排序">
+                <span class="drag-handle" :title="t('accounts.dragToSort')">
                   <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" /></svg>
                 </span>
                 <div class="account-row__info">
@@ -117,31 +118,31 @@ async function deactivate(row: Account) {
                 <span>#{{ element.sort_order }}</span>
               </div>
               <div class="account-row__actions">
-                <n-button size="small" quaternary @click="openEdit(element)">编辑</n-button>
-                <n-button size="small" quaternary type="error" @click="deactivate(element)">停用</n-button>
+                <n-button size="small" quaternary @click="openEdit(element)">{{ t('common.actions.edit') }}</n-button>
+                <n-button size="small" quaternary type="error" @click="deactivate(element)">{{ t('common.actions.deactivate') }}</n-button>
               </div>
             </div>
           </template>
         </draggable>
-        <n-empty v-if="!loading && !list.length" class="panel-empty" description="还没有账户，先新建一个" />
+        <n-empty v-if="!loading && !list.length" class="panel-empty" :description="t('accounts.empty')" />
       </n-card>
     </n-spin>
-    <n-modal v-model:show="showModal" preset="card" :title="editing ? '编辑账户' : '新建账户'" style="width: 480px">
+    <n-modal v-model:show="showModal" preset="card" :title="editing ? t('accounts.edit') : t('accounts.create')" style="width: 480px">
       <n-form>
-        <n-form-item label="名称">
+        <n-form-item :label="t('accounts.fields.name')">
           <n-input v-model:value="form.name" />
         </n-form-item>
-        <n-form-item label="类型">
+        <n-form-item :label="t('accounts.fields.type')">
           <n-select v-model:value="form.type" :options="typeOptions" />
         </n-form-item>
-        <n-form-item label="归属">
+        <n-form-item :label="t('accounts.fields.owner')">
           <n-select v-model:value="form.owner" :options="ownerOptions" />
         </n-form-item>
       </n-form>
       <template #footer>
         <div class="modal-footer">
-          <n-button @click="showModal = false">取消</n-button>
-          <n-button type="primary" @click="saveAccount">保存</n-button>
+          <n-button @click="showModal = false">{{ t('common.actions.cancel') }}</n-button>
+          <n-button type="primary" @click="saveAccount">{{ t('common.actions.save') }}</n-button>
         </div>
       </template>
     </n-modal>

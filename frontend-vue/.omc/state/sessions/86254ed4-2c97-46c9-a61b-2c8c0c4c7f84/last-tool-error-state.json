@@ -1,0 +1,7 @@
+{
+  "tool_name": "mcp__Claude_Browser__browser_batch",
+  "tool_input_preview": "{\"actions\":[{\"name\":\"tabs_select\",\"input\":{\"tabId\":\"tab-2\"}},{\"name\":\"navigate\",\"input\":{\"tabId\":\"tab-2\",\"url\":\"http://localhost:5173/brand-picker.html\"}},{\"name\":\"resize_window\",\"input\":{\"tabId\":\"tab...",
+  "error": "actions[0] (tabs_select) failed: Tab tab-2 not found. (0 completed, 4 remaining)",
+  "timestamp": "2026-09-27T15:03:34.495Z",
+  "retry_count": 1
+}

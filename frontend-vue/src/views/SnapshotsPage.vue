@@ -5,6 +5,7 @@ import { useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { SnapshotListItem } from '@/types/models'
 import * as snapshotApi from '@/api/snapshot'
+import { t } from '@/i18n'
 import { amountTone, formatMoney, formatSignedMoney } from '@/lib/format'
 import { mobileCardColumns } from '@/lib/mobileCard'
 import { useIsMobile } from '@/composables/useIsMobile'
@@ -34,12 +35,12 @@ const stats = computed(() => {
   const latest = list[0]
   const earliest = list[list.length - 1]
   return [
-    { label: '快照次数', value: list.length, unit: '次' },
-    { label: '最近一次', value: latest?.date ?? '—', hint: latest ? formatMoney(latest.netWorth) : undefined },
+    { label: t('snapshots.list.stats.count'), value: list.length, unit: t('common.unit.times') },
+    { label: t('snapshots.list.stats.latest'), value: latest?.date ?? '—', hint: latest ? formatMoney(latest.netWorth) : undefined },
     {
-      label: '累计变化',
+      label: t('snapshots.list.stats.totalChange'),
       value: latest && earliest ? formatSignedMoney(latest.netWorth - earliest.netWorth) : '—',
-      hint: earliest ? `自 ${earliest.date}` : undefined,
+      hint: earliest ? t('snapshots.list.stats.since', { date: earliest.date }) : undefined,
       tone: latest && earliest ? amountTone(latest.netWorth - earliest.netWorth) : '',
     },
   ]
@@ -47,7 +48,7 @@ const stats = computed(() => {
 
 function changeCell(row: Row) {
   if (row.change === null) {
-    return h('span', { class: 'amount amount--muted' }, '首次记录')
+    return h('span', { class: 'amount amount--muted' }, t('snapshots.list.firstRecord'))
   }
   const tone = amountTone(row.change)
   return h('span', { class: ['amount', tone ? `amount--${tone}` : 'amount--muted'] }, formatSignedMoney(row.change))
@@ -55,24 +56,24 @@ function changeCell(row: Row) {
 
 const columns: DataTableColumns<Row> = [
   {
-    title: '日期',
+    title: t('snapshots.list.columns.date'),
     key: 'date',
     render: (row) => h('span', { class: 'cell-main' }, row.date),
   },
   {
-    title: '净资产',
+    title: t('snapshots.list.columns.netWorth'),
     key: 'netWorth',
     align: 'right',
     render: (row) => h('span', { class: 'amount' }, formatMoney(row.netWorth)),
   },
   {
-    title: '较上次',
+    title: t('snapshots.list.columns.change'),
     key: 'change',
     align: 'right',
     render: changeCell,
   },
   {
-    title: '记录时间',
+    title: t('snapshots.list.columns.createdAt'),
     key: 'createdAt',
     align: 'right',
     render: (row) => h('span', { class: 'cell-muted' }, row.createdAt),
@@ -80,7 +81,7 @@ const columns: DataTableColumns<Row> = [
 ]
 
 const cardColumns = mobileCardColumns<Row>((row) => ({
-  title: [h('span', { class: 'cell-main' }, row.date), h('span', { class: 'cell-muted' }, `记录于 ${row.createdAt}`)],
+  title: [h('span', { class: 'cell-main' }, row.date), h('span', { class: 'cell-muted' }, t('snapshots.list.recordedAt', { time: row.createdAt }))],
   value: [h('div', { class: 'amount' }, formatMoney(row.netWorth)), h('div', { class: 'cell-muted' }, changeCell(row))],
 }))
 
@@ -88,7 +89,7 @@ onMounted(async () => {
   try {
     rows.value = await snapshotApi.listSnapshots()
   } catch {
-    message.error('加载失败')
+    message.error(t('common.status.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -104,14 +105,14 @@ function rowProps(row: Row) {
 
 <template>
   <div class="page-stack">
-    <PageHeader title="快照" description="每一次快照都是某一天全部账户余额的记录，点击行查看明细。">
+    <PageHeader :title="t('snapshots.title')" :description="t('snapshots.list.description')">
       <SnapshotViewSwitch current="list" />
-      <n-button type="primary" @click="router.push('/snapshots/new')">记录快照</n-button>
+      <n-button type="primary" @click="router.push('/snapshots/new')">{{ t('snapshots.newSnapshot') }}</n-button>
     </PageHeader>
 
     <StatStrip v-if="tableRows.length" :items="stats" />
 
-    <n-card class="surface-panel surface-panel--flush" title="全部快照">
+    <n-card class="surface-panel surface-panel--flush" :title="t('snapshots.list.allSnapshots')">
       <n-data-table
         :loading="loading"
         :class="{ 'data-table--cards': isMobile }"

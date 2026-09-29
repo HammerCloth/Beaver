@@ -10,6 +10,8 @@ import type { DataTableColumns } from 'naive-ui'
 import type { GiftRecipient, GiftRecord } from '@/types/models'
 import * as giftApi from '@/api/gift'
 import { formatMoney } from '@/lib/format'
+import { localToday } from '@/lib/date'
+import { t } from '@/i18n'
 import { mobileCardColumns } from '@/lib/mobileCard'
 import { useIsMobile } from '@/composables/useIsMobile'
 
@@ -45,7 +47,7 @@ const recipientCreateForRecord = ref(false)
 const recordForm = ref<giftApi.GiftBody>({
   recipientId: '',
   occasion: '',
-  giftDate: new Date().toISOString().slice(0, 10),
+  giftDate: localToday(),
   amount: null,
   paymentMethod: '',
   note: '',
@@ -74,38 +76,38 @@ const occasionItems = computed<DonutItem[]>(() =>
 )
 
 const statItems = computed(() => [
-  { label: `${stats.value.year} 年礼金支出`, value: formatMoney(stats.value.grandTotal) },
-  { label: '记录', value: stats.value.count, unit: '笔' },
-  { label: '涉及对象', value: stats.value.recipientCount, unit: '位' },
+  { label: t('gifts.stats.yearTotal', { year: stats.value.year }), value: formatMoney(stats.value.grandTotal) },
+  { label: t('gifts.stats.records'), value: stats.value.count, unit: t('common.unit.items') },
+  { label: t('gifts.stats.recipients'), value: stats.value.recipientCount, unit: t('common.unit.people') },
   {
-    label: '平均每笔',
-    value: stats.value.count ? formatMoney(stats.value.grandTotal / stats.value.count) : '—',
+    label: t('gifts.stats.average'),
+    value: stats.value.count ? formatMoney(stats.value.grandTotal / stats.value.count) : t('common.empty'),
   },
 ])
 
 const recordColumns: DataTableColumns<GiftRecord> = [
-  { title: '日期', key: 'gift_date', width: 112, render: (row) => h('span', { class: 'cell-muted' }, row.gift_date) },
+  { title: t('gifts.columns.date'), key: 'gift_date', width: 112, render: (row) => h('span', { class: 'cell-muted' }, row.gift_date) },
   {
-    title: '对象', key: 'recipient_name', minWidth: 150,
+    title: t('gifts.columns.recipient'), key: 'recipient_name', minWidth: 150,
     render(row) {
       return h('a', { class: 'text-action', onClick: () => openRecipientDetail(row.gift_recipient_id) }, row.recipient_name)
     },
   },
-  { title: '关系', key: 'recipient_relationship', width: 100, render: (row) => row.recipient_relationship || '—' },
-  { title: '场合', key: 'occasion', width: 110, render: (row) => h('span', { class: 'badge badge--plain' }, row.occasion) },
-  { title: '方式', key: 'payment_method', width: 100, render: (row) => row.payment_method || '—' },
-  { title: '备注', key: 'note', ellipsis: { tooltip: true }, render: (row) => h('span', { class: 'cell-muted' }, row.note || '—') },
-  { title: '实际承担', key: 'amount', width: 120, align: 'right', render: (row) => h('span', { class: 'amount' }, formatMoney(row.amount)) },
+  { title: t('gifts.columns.relationship'), key: 'recipient_relationship', width: 100, render: (row) => row.recipient_relationship || '—' },
+  { title: t('gifts.columns.occasion'), key: 'occasion', width: 110, render: (row) => h('span', { class: 'badge badge--plain' }, row.occasion) },
+  { title: t('gifts.columns.method'), key: 'payment_method', width: 100, render: (row) => row.payment_method || '—' },
+  { title: t('gifts.columns.note'), key: 'note', ellipsis: { tooltip: true }, render: (row) => h('span', { class: 'cell-muted' }, row.note || '—') },
+  { title: t('gifts.columns.amount'), key: 'amount', width: 120, align: 'right', render: (row) => h('span', { class: 'amount' }, formatMoney(row.amount)) },
   {
-    title: '', key: 'actions', width: 110, align: 'right',
+    title: '', key: 'actions', width: 130, align: 'right',
     render: (row) => h('div', { class: 'table-actions' }, recordActions(row)),
   },
 ]
 
 function recordActions(row: GiftRecord) {
   return [
-    h('button', { class: 'text-action', onClick: () => openEditRecord(row) }, '编辑'),
-    h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteRecord(row) }, '删除'),
+    h('button', { class: 'text-action', onClick: () => openEditRecord(row) }, t('common.actions.edit')),
+    h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteRecord(row) }, t('common.actions.delete')),
   ]
 }
 
@@ -136,7 +138,7 @@ async function load() {
     records.value = recordRows
     stats.value = statsData
   } catch {
-    message.error('加载礼金数据失败')
+    message.error(t('gifts.toast.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -157,7 +159,7 @@ function openCreateRecord() {
   recordForm.value = {
     recipientId: recipientOptions.value[0].value,
     occasion: '',
-    giftDate: new Date().toISOString().slice(0, 10),
+    giftDate: localToday(),
     amount: null,
     paymentMethod: '',
     note: '',
@@ -182,31 +184,31 @@ async function saveRecord() {
   try {
     if (editingRecord.value) {
       await giftApi.updateRecord(editingRecord.value.id, recordForm.value)
-      message.success('礼金记录已更新')
+      message.success(t('gifts.toast.recordUpdated'))
     } else {
       await giftApi.createRecord(recordForm.value)
-      message.success('礼金已记录')
+      message.success(t('gifts.toast.recordCreated'))
     }
     recordModalOpen.value = false
     await load()
   } catch (error) {
-    message.error(apiMessage(error, '保存失败'))
+    message.error(apiMessage(error, t('common.status.saveFailed')))
   }
 }
 
 function confirmDeleteRecord(row: GiftRecord) {
   dialog.warning({
-    title: '删除礼金记录',
-    content: `确定删除 ${row.recipient_name} 的 ${formatMoney(row.amount)} 礼金记录吗？`,
-    positiveText: '删除',
-    negativeText: '取消',
+    title: t('gifts.dialog.deleteRecordTitle'),
+    content: t('gifts.dialog.deleteRecordContent', { name: row.recipient_name, amount: formatMoney(row.amount) }),
+    positiveText: t('common.actions.delete'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       try {
         await giftApi.deleteRecord(row.id)
-        message.success('已删除')
+        message.success(t('common.status.deleted'))
         await load()
       } catch {
-        message.error('删除失败')
+        message.error(t('gifts.toast.deleteFailed'))
       }
     },
   })
@@ -231,11 +233,11 @@ async function saveRecipient() {
   try {
     if (editingRecipient.value) {
       await giftApi.updateRecipient(editingRecipient.value.id, recipientForm.value)
-      message.success('礼金对象已更新')
+      message.success(t('gifts.toast.recipientUpdated'))
     } else {
       const recipient = await giftApi.createRecipient(recipientForm.value)
       recordForm.value.recipientId = recipient.id
-      message.success('礼金对象已创建')
+      message.success(t('gifts.toast.recipientCreated'))
     }
     recipientModalOpen.value = false
     await load()
@@ -244,23 +246,23 @@ async function saveRecipient() {
     }
     recipientCreateForRecord.value = false
   } catch (error) {
-    message.error(apiMessage(error, '保存失败'))
+    message.error(apiMessage(error, t('common.status.saveFailed')))
   }
 }
 
 function confirmDeactivateRecipient(row: GiftRecipient) {
   dialog.warning({
-    title: '停用礼金对象',
-    content: `停用后不能再新增关联 ${row.name} 的礼金，已有历史仍会保留。`,
-    positiveText: '停用',
-    negativeText: '取消',
+    title: t('gifts.dialog.deactivateTitle'),
+    content: t('gifts.dialog.deactivateContent', { name: row.name }),
+    positiveText: t('common.actions.deactivate'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       try {
         await giftApi.deactivateRecipient(row.id)
-        message.success('已停用')
+        message.success(t('gifts.toast.deactivated'))
         await load()
       } catch {
-        message.error('操作失败')
+        message.error(t('common.status.operationFailed'))
       }
     },
   })
@@ -273,7 +275,7 @@ async function openRecipientDetail(id: string) {
     detailRecords.value = await giftApi.listRecords({ recipientId: id })
   } catch {
     detailRecords.value = []
-    message.error('加载对象历史失败')
+    message.error(t('gifts.toast.historyLoadFailed'))
   }
 }
 
@@ -285,74 +287,74 @@ function apiMessage(error: unknown, fallback: string) {
 
 <template>
   <div class="page-stack">
-    <PageHeader title="礼金" description="记录自己实际承担的礼金，按对象沉淀往来历史，下次随礼时有据可查。">
-      <n-button @click="recipientManagerOpen = true">礼金对象</n-button>
-      <n-button type="primary" @click="openCreateRecord">记录礼金</n-button>
+    <PageHeader :title="t('gifts.title')" :description="t('gifts.description')">
+      <n-button @click="recipientManagerOpen = true">{{ t('gifts.recipients') }}</n-button>
+      <n-button type="primary" @click="openCreateRecord">{{ t('gifts.recordGift') }}</n-button>
     </PageHeader>
 
     <div class="filter-bar">
       <n-input-number v-model:value="year" :input-props="{ inputmode: 'numeric' }" class="filter-bar__year" :min="2000" :max="2100" />
-      <n-input v-model:value="keyword" class="filter-bar__grow" clearable placeholder="搜索对象、场合或备注" @keyup.enter="onSearch">
+      <n-input v-model:value="keyword" class="filter-bar__grow" clearable :placeholder="t('gifts.searchPlaceholder')" @keyup.enter="onSearch">
         <template #prefix>
           <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         </template>
       </n-input>
-      <n-select v-model:value="recipientFilter" class="filter-bar__fixed" clearable placeholder="全部对象" :options="allRecipientOptions" />
-      <n-button @click="onSearch">筛选</n-button>
+      <n-select v-model:value="recipientFilter" class="filter-bar__fixed" clearable :placeholder="t('gifts.allRecipients')" :options="allRecipientOptions" />
+      <n-button @click="onSearch">{{ t('common.actions.filter') }}</n-button>
     </div>
 
     <n-spin :show="loading">
       <StatStrip :items="statItems" />
 
-      <n-card v-if="occasionItems.length" class="surface-panel" title="按场合分布">
+      <n-card v-if="occasionItems.length" class="surface-panel" :title="t('gifts.byOccasion')">
         <DonutBreakdown
           layout="split"
           bars
           :items="occasionItems"
-          center-label="合计"
-          :meta="(item) => stats.countByOccasion[item.name] ? `${stats.countByOccasion[item.name]} 笔` : undefined"
+          :center-label="t('gifts.total')"
+          :meta="(item) => stats.countByOccasion[item.name] ? t('gifts.recordCount', { n: stats.countByOccasion[item.name] }) : undefined"
         />
       </n-card>
 
       <n-card class="surface-panel surface-panel--flush">
         <template #header>
-          礼金明细 <span class="section-note">· {{ records.length }} 笔</span>
+          {{ t('gifts.listTitle') }} <span class="section-note">· {{ t('gifts.recordCount', { n: records.length }) }}</span>
         </template>
         <n-data-table
           :class="{ 'data-table--cards': isMobile }"
           :columns="isMobile ? recordCardColumns : recordColumns"
           :data="records"
           :row-key="(row: GiftRecord) => row.id"
-          :scroll-x="isMobile ? undefined : 940"
+          :scroll-x="isMobile ? undefined : 960"
         />
-        <n-empty v-if="!loading && !records.length" class="panel-empty" description="还没有符合条件的礼金记录" />
+        <n-empty v-if="!loading && !records.length" class="panel-empty" :description="t('gifts.empty')" />
       </n-card>
     </n-spin>
 
-    <n-modal v-model:show="recordModalOpen" preset="card" :title="editingRecord ? '编辑礼金记录' : '记录礼金'" style="width: 520px">
+    <n-modal v-model:show="recordModalOpen" preset="card" :title="editingRecord ? t('gifts.editRecord') : t('gifts.recordGift')" style="width: 520px">
       <n-form label-placement="left" label-width="90">
-        <n-form-item label="礼金对象" required><n-select v-model:value="recordForm.recipientId" filterable :options="recipientOptions" /></n-form-item>
-        <n-form-item label="场合" required><n-input v-model:value="recordForm.occasion" placeholder="例如：结婚、满月、乔迁" /></n-form-item>
-        <n-form-item label="礼金日期" required><n-date-picker v-model:formatted-value="recordForm.giftDate" value-format="yyyy-MM-dd" type="date" clearable /></n-form-item>
-        <n-form-item label="实际承担" required><n-input-number v-model:value="recordForm.amount" :input-props="{ inputmode: 'decimal' }" :min="0.01" :precision="2" style="width: 100%"><template #prefix>¥</template></n-input-number></n-form-item>
-        <n-form-item label="支付方式"><n-input v-model:value="recordForm.paymentMethod" placeholder="微信、现金、银行卡等" /></n-form-item>
-        <n-form-item label="备注"><n-input v-model:value="recordForm.note" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></n-form-item>
+        <n-form-item :label="t('gifts.form.recipient')" required><n-select v-model:value="recordForm.recipientId" filterable :options="recipientOptions" /></n-form-item>
+        <n-form-item :label="t('gifts.form.occasion')" required><n-input v-model:value="recordForm.occasion" :placeholder="t('gifts.form.occasionPlaceholder')" /></n-form-item>
+        <n-form-item :label="t('gifts.form.giftDate')" required><n-date-picker v-model:formatted-value="recordForm.giftDate" value-format="yyyy-MM-dd" type="date" clearable /></n-form-item>
+        <n-form-item :label="t('gifts.form.amount')" required><n-input-number v-model:value="recordForm.amount" :input-props="{ inputmode: 'decimal' }" :min="0.01" :precision="2" style="width: 100%"><template #prefix>¥</template></n-input-number></n-form-item>
+        <n-form-item :label="t('gifts.form.paymentMethod')"><n-input v-model:value="recordForm.paymentMethod" :placeholder="t('gifts.form.paymentMethodPlaceholder')" /></n-form-item>
+        <n-form-item :label="t('gifts.form.note')"><n-input v-model:value="recordForm.note" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></n-form-item>
       </n-form>
-      <template #footer><div class="modal-footer"><n-button @click="recordModalOpen = false">取消</n-button><n-button type="primary" @click="saveRecord">保存</n-button></div></template>
+      <template #footer><div class="modal-footer"><n-button @click="recordModalOpen = false">{{ t('common.actions.cancel') }}</n-button><n-button type="primary" @click="saveRecord">{{ t('common.actions.save') }}</n-button></div></template>
     </n-modal>
 
-    <n-modal v-model:show="recipientModalOpen" preset="card" :title="editingRecipient ? '编辑礼金对象' : '新建礼金对象'" style="width: 480px">
+    <n-modal v-model:show="recipientModalOpen" preset="card" :title="editingRecipient ? t('gifts.editRecipient') : t('gifts.newRecipient')" style="width: 480px">
       <n-form label-placement="left" label-width="76">
-        <n-form-item label="名称" required><n-input v-model:value="recipientForm.name" placeholder="例如：张三夫妇、王阿姨一家" /></n-form-item>
-        <n-form-item label="关系"><n-input v-model:value="recipientForm.relationship" placeholder="例如：同学、亲戚、同事" /></n-form-item>
-        <n-form-item label="备注"><n-input v-model:value="recipientForm.note" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></n-form-item>
+        <n-form-item :label="t('gifts.form.name')" required><n-input v-model:value="recipientForm.name" :placeholder="t('gifts.form.namePlaceholder')" /></n-form-item>
+        <n-form-item :label="t('gifts.form.relationship')"><n-input v-model:value="recipientForm.relationship" :placeholder="t('gifts.form.relationshipPlaceholder')" /></n-form-item>
+        <n-form-item :label="t('gifts.form.note')"><n-input v-model:value="recipientForm.note" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></n-form-item>
       </n-form>
-      <template #footer><div class="modal-footer"><n-button @click="recipientModalOpen = false">取消</n-button><n-button type="primary" @click="saveRecipient">保存</n-button></div></template>
+      <template #footer><div class="modal-footer"><n-button @click="recipientModalOpen = false">{{ t('common.actions.cancel') }}</n-button><n-button type="primary" @click="saveRecipient">{{ t('common.actions.save') }}</n-button></div></template>
     </n-modal>
 
-    <n-modal v-model:show="recipientManagerOpen" preset="card" title="礼金对象" style="width: min(760px, calc(100vw - 32px))">
+    <n-modal v-model:show="recipientManagerOpen" preset="card" :title="t('gifts.recipients')" style="width: min(760px, calc(100vw - 32px))">
       <div class="gift-recipient-manager-head">
-        <n-button size="small" type="primary" @click="openCreateRecipient()">新建对象</n-button>
+        <n-button size="small" type="primary" @click="openCreateRecipient()">{{ t('gifts.newRecipientShort') }}</n-button>
       </div>
       <div class="gift-recipient-list">
         <div v-for="recipient in recipients" :key="recipient.id" class="gift-recipient-row">
@@ -361,24 +363,24 @@ function apiMessage(error: unknown, fallback: string) {
             <span v-if="recipient.relationship" class="section-note">{{ recipient.relationship }}</span>
             <p v-if="recipient.note" class="gift-recipient-note">{{ recipient.note }}</p>
           </div>
-          <div class="gift-recipient-meta">{{ formatMoney(recipient.gift_total) }} · {{ recipient.gift_count }} 笔</div>
-          <n-tag v-if="!recipient.is_active" size="small" type="warning">已停用</n-tag>
-          <n-space size="small"><n-button size="small" quaternary @click="openEditRecipient(recipient)">编辑</n-button><n-button v-if="recipient.is_active" size="small" quaternary type="error" @click="confirmDeactivateRecipient(recipient)">停用</n-button></n-space>
+          <div class="gift-recipient-meta">{{ formatMoney(recipient.gift_total) }} · {{ t('gifts.recordCount', { n: recipient.gift_count }) }}</div>
+          <n-tag v-if="!recipient.is_active" size="small" type="warning">{{ t('gifts.inactive') }}</n-tag>
+          <n-space size="small"><n-button size="small" quaternary @click="openEditRecipient(recipient)">{{ t('common.actions.edit') }}</n-button><n-button v-if="recipient.is_active" size="small" quaternary type="error" @click="confirmDeactivateRecipient(recipient)">{{ t('common.actions.deactivate') }}</n-button></n-space>
         </div>
-        <n-empty v-if="!recipients.length" description="先建立第一个礼金对象" style="padding: 28px 0" />
+        <n-empty v-if="!recipients.length" :description="t('gifts.recipientsEmpty')" style="padding: 28px 0" />
       </div>
     </n-modal>
 
     <n-drawer :show="Boolean(detailRecipient)" :width="420" placement="right" @update:show="(show: boolean) => { if (!show) detailRecipient = null }">
       <n-drawer-content v-if="detailRecipient" :title="detailRecipient.name">
         <n-tag v-if="detailRecipient.relationship" size="small">{{ detailRecipient.relationship }}</n-tag>
-        <p class="section-note">累计礼金 {{ formatMoney(detailTotal) }}，共 {{ detailRecords.length }} 笔</p>
+        <p class="section-note">{{ t('gifts.drawer.summary', { amount: formatMoney(detailTotal), n: detailRecords.length }) }}</p>
         <n-timeline style="margin-top: 24px">
           <n-timeline-item v-for="record in detailRecords" :key="record.id" :title="`${record.occasion} · ${formatMoney(record.amount)}`" :content="record.payment_method || undefined" :time="record.gift_date">
             <span v-if="record.note" class="section-note">{{ record.note }}</span>
           </n-timeline-item>
         </n-timeline>
-        <n-empty v-if="!detailRecords.length" description="该对象在当前年份没有记录" />
+        <n-empty v-if="!detailRecords.length" :description="t('gifts.drawer.empty')" />
       </n-drawer-content>
     </n-drawer>
   </div>

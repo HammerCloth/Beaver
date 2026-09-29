@@ -17,6 +17,7 @@ import * as accountApi from '@/api/account'
 import * as dashboardApi from '@/api/dashboard'
 import type { DashboardComposition, DashboardTypeChange } from '@/api/dashboard'
 import { formatMoney } from '@/lib/format'
+import { currentLocale, t } from '@/i18n'
 import DonutBreakdown, { type DonutItem } from '@/components/DonutBreakdown.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useCategoryColor } from '@/composables/useCategoryColor'
@@ -160,9 +161,9 @@ const typeChangeOption = computed(() => {
         }
         return [
           settings.label(DIM_ACCOUNT_TYPE, item.type),
-          `本次：${formatMoney(item.latest)}`,
-          `上次：${formatMoney(item.previous)}`,
-          `变化：${formatMoney(item.change)}`,
+          t('dashboard.typeChange.latest', { amount: formatMoney(item.latest) }),
+          t('dashboard.typeChange.previous', { amount: formatMoney(item.previous) }),
+          t('dashboard.typeChange.change', { amount: formatMoney(item.change) }),
         ].join('<br/>')
       },
     },
@@ -191,7 +192,7 @@ const typeChangeOption = computed(() => {
     },
     series: [
       {
-        name: '流入',
+        name: t('dashboard.typeChange.inflow'),
         type: 'bar',
         clip: false,
         barMaxWidth: 26,
@@ -217,7 +218,7 @@ const typeChangeOption = computed(() => {
         },
       },
       {
-        name: '流出',
+        name: t('dashboard.typeChange.outflow'),
         type: 'bar',
         clip: false,
         barGap: '-100%',
@@ -256,17 +257,17 @@ function toneOf(value: number) {
 }
 
 const kpis = computed(() => [
-  { label: '净资产', value: formatMoney(summary.value.netWorth), hint: '最新快照', tone: '' },
+  { label: t('dashboard.netWorth'), value: formatMoney(summary.value.netWorth), hint: t('dashboard.kpi.latestSnapshot'), tone: '' },
   {
-    label: '近一月变化',
+    label: t('dashboard.kpi.monthlyChange'),
     value: signedMoney(summary.value.monthlyChange),
-    hint: '对比一个月前的快照',
+    hint: t('dashboard.kpi.monthlyHint'),
     tone: toneOf(summary.value.monthlyChange),
   },
   {
-    label: '近一年变化',
+    label: t('dashboard.kpi.annualChange'),
     value: signedMoney(summary.value.annualChange),
-    hint: '对比一年前的快照',
+    hint: t('dashboard.kpi.annualHint'),
     tone: toneOf(summary.value.annualChange),
   },
 ])
@@ -277,12 +278,12 @@ const typeChangeAllZero = computed(() => typeChange.value.items.every((item) => 
 const typeChangeSummary = computed(() => {
   const total = typeChange.value.items.reduce((sum, item) => sum + (Number.isFinite(item.change) ? item.change : 0), 0)
   if (total > 0) {
-    return { label: '净流入', value: total, tone: 'positive' }
+    return { label: t('dashboard.typeChange.netInflow'), value: total, tone: 'positive' }
   }
   if (total < 0) {
-    return { label: '净流出', value: Math.abs(total), tone: 'negative' }
+    return { label: t('dashboard.typeChange.netOutflow'), value: Math.abs(total), tone: 'negative' }
   }
-  return { label: '净变化', value: 0, tone: 'neutral' }
+  return { label: t('dashboard.typeChange.netChange'), value: 0, tone: 'neutral' }
 })
 
 const palette = chartPalette
@@ -291,13 +292,25 @@ type SankeyLink = { source: string; target: string; value: number; raw?: number;
 
 function formatAssetAmount(value: number) {
   const abs = Math.abs(value)
+  // 负号放在货币符号前面：-¥1.20w，而不是 ¥-1.20w
+  const sign = value < 0 ? '-' : ''
+  if (currentLocale() !== 'zh-CN') {
+    // 英文界面用 K/M 缩写
+    if (abs >= 1_000_000) {
+      return `${sign}¥${(abs / 1_000_000).toFixed(2)}M`
+    }
+    if (abs > 1000) {
+      return `${sign}¥${(abs / 1000).toFixed(2)}K`
+    }
+    return `${sign}¥${abs.toFixed(2)}`
+  }
   if (abs > 10000) {
-    return `¥${(value / 10000).toFixed(2)}w`
+    return `${sign}¥${(abs / 10000).toFixed(2)}w`
   }
   if (abs > 1000) {
-    return `¥${(value / 1000).toFixed(2)}k`
+    return `${sign}¥${(abs / 1000).toFixed(2)}k`
   }
-  return `¥${value.toFixed(2)}`
+  return `${sign}¥${abs.toFixed(2)}`
 }
 
 function compactLabelName(name: string, maxLength: number) {
@@ -327,7 +340,7 @@ const assetSankeyData = computed(() => {
 
   const totalAssets = positiveTypes.reduce((sum, [, value]) => sum + value, 0)
 
-  addNode('summary:totalAssets', '总资产', palette[0], totalAssets)
+  addNode('summary:totalAssets', t('dashboard.totalAssets'), palette[0], totalAssets)
 
   positiveTypes
     .sort((a, b) => b[1] - a[1])
@@ -341,7 +354,7 @@ const assetSankeyData = computed(() => {
         target: typeNodeName,
         value,
         raw: value,
-        labelName: `总资产 → ${typeName}`,
+        labelName: `${t('dashboard.totalAssets')} → ${typeName}`,
       })
 
       const accounts = composition.value.byTypeAccounts?.[type] ?? {}
@@ -407,7 +420,7 @@ const assetSankeyOption = computed(() => ({
         overflow: isMobileChart.value ? 'truncate' : undefined,
         formatter: (p: { name: string; data?: { labelName?: string; raw?: number } }) => {
           if (p.name === 'summary:totalAssets') {
-            return `总资产  ${formatAssetAmount(assetSankeyData.value.totalAssets)}`
+            return t('dashboard.flow.totalLabel', { amount: formatAssetAmount(assetSankeyData.value.totalAssets) })
           }
           if (p.data?.labelName && Number.isFinite(p.data.raw)) {
             if (isMobileChart.value) {
@@ -573,7 +586,7 @@ async function load() {
     }
   } catch (e) {
     console.error('dashboard load', e)
-    message.error('加载仪表盘失败')
+    message.error(t('dashboard.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -584,7 +597,7 @@ watch(range, async () => {
     await loadRangeCharts()
   } catch (e) {
     console.error('dashboard range charts', e)
-    message.error('加载图表失败')
+    message.error(t('dashboard.chartsLoadFailed'))
   }
 })
 
@@ -604,12 +617,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page-stack">
-    <PageHeader title="资产总览">
+    <PageHeader :title="t('dashboard.title')">
       <template #description>
-        <template v-if="typeChange.latestDate">数据截至 {{ typeChange.latestDate }} 的最新快照</template>
-        <template v-else>基于最新快照的净资产、结构与变化趋势</template>
+        <template v-if="typeChange.latestDate">{{ t('dashboard.descAsOf', { date: typeChange.latestDate }) }}</template>
+        <template v-else>{{ t('dashboard.descDefault') }}</template>
       </template>
-      <n-button type="primary" @click="router.push('/snapshots/new')">记录快照</n-button>
+      <n-button type="primary" @click="router.push('/snapshots/new')">{{ t('dashboard.recordSnapshot') }}</n-button>
     </PageHeader>
 
     <n-spin :show="loading">
@@ -617,7 +630,7 @@ onBeforeUnmount(() => {
         <div class="bento__span-8 hero-card">
           <div class="hero-card__head">
             <div>
-              <div class="hero-card__label">净资产</div>
+              <div class="hero-card__label">{{ t('dashboard.netWorth') }}</div>
               <div class="hero-card__value">{{ formatMoney(summary.netWorth) }}</div>
               <div class="hero-card__chips">
                 <span v-for="kpi in kpis.slice(1)" :key="kpi.label" class="delta-chip" :class="kpi.tone && `delta-chip--${kpi.tone}`">
@@ -627,35 +640,35 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <n-tabs v-model:value="range" type="segment" size="small" class="range-tabs">
-              <n-tab name="3m">3月</n-tab>
-              <n-tab name="6m">6月</n-tab>
-              <n-tab name="1y">1年</n-tab>
-              <n-tab name="all">全部</n-tab>
+              <n-tab name="3m">{{ t('dashboard.range.m3') }}</n-tab>
+              <n-tab name="6m">{{ t('dashboard.range.m6') }}</n-tab>
+              <n-tab name="1y">{{ t('dashboard.range.y1') }}</n-tab>
+              <n-tab name="all">{{ t('dashboard.range.all') }}</n-tab>
             </n-tabs>
           </div>
           <v-chart v-if="trendPoints.length" class="hero-card__chart" :option="trendOption" autoresize />
-          <n-empty v-else class="hero-card__chart" description="暂无趋势数据" />
+          <n-empty v-else class="hero-card__chart" :description="t('dashboard.emptyTrend')" />
         </div>
 
-        <n-card class="bento__span-4 surface-panel" title="资产构成">
+        <n-card class="bento__span-4 surface-panel" :title="t('dashboard.composition.title')">
           <template #header-extra>
             <n-tabs v-model:value="compositionMode" type="segment" size="small" class="mini-tabs">
-              <n-tab name="type">类型</n-tab>
-              <n-tab name="owner">归属</n-tab>
+              <n-tab name="type">{{ t('dashboard.composition.byType') }}</n-tab>
+              <n-tab name="owner">{{ t('dashboard.composition.byOwner') }}</n-tab>
             </n-tabs>
           </template>
           <DonutBreakdown
             v-if="compositionItems.length"
             :items="compositionItems"
-            :center-label="compositionMode === 'type' ? '总资产' : '净资产'"
+            :center-label="compositionMode === 'type' ? t('dashboard.totalAssets') : t('dashboard.netWorth')"
             :center-value="compositionMode === 'type' ? undefined : summary.netWorth"
           />
-          <n-empty v-else description="暂无资产快照数据" />
+          <n-empty v-else :description="t('dashboard.emptySnapshot')" />
         </n-card>
 
-        <n-card class="bento__span-12 surface-panel" title="资产流向">
+        <n-card class="bento__span-12 surface-panel" :title="t('dashboard.flow.title')">
           <template #header-extra>
-            <span class="section-note">总资产 → 类型 → 账户</span>
+            <span class="section-note">{{ t('dashboard.flow.note') }}</span>
           </template>
           <v-chart
             v-if="assetSankeyData.links.length"
@@ -663,24 +676,24 @@ onBeforeUnmount(() => {
             :option="assetSankeyOption"
             autoresize
           />
-          <n-empty v-else description="暂无资产快照数据" />
+          <n-empty v-else :description="t('dashboard.emptySnapshot')" />
         </n-card>
 
-        <n-card class="bento__span-8 surface-panel" title="资产堆叠">
+        <n-card class="bento__span-8 surface-panel" :title="t('dashboard.stacked.title')">
           <template #header-extra>
-            <span class="section-note">按类型 · 与上方时间范围一致</span>
+            <span class="section-note">{{ t('dashboard.stacked.note') }}</span>
           </template>
           <v-chart v-if="stackedPoints.length" class="chart-frame" :option="stackedByTypeOption" autoresize />
-          <n-empty v-else description="暂无数据" />
+          <n-empty v-else :description="t('dashboard.stacked.empty')" />
         </n-card>
 
-        <n-card class="bento__span-4 surface-panel" title="类型内账户">
+        <n-card class="bento__span-4 surface-panel" :title="t('dashboard.typeAccounts.title')">
           <template #header-extra>
             <n-select
               v-model:value="accountShareTypeKey"
               :options="accountShareTypeOptions"
               size="small"
-              placeholder="选择类型"
+              :placeholder="t('dashboard.typeAccounts.selectType')"
               style="width: 112px"
               :disabled="!accountShareTypeOptions.length"
             />
@@ -691,11 +704,11 @@ onBeforeUnmount(() => {
             :center-label="accountShareTypeOptions.find((o) => o.value === accountShareTypeKey)?.label"
             :center-value="typeAccountShareItems.reduce((sum, x) => sum + x.value, 0)"
           />
-          <n-empty v-else-if="!accountShareTypeOptions.length" description="暂无分账户数据" />
-          <n-empty v-else description="该类型下暂无账户余额" />
+          <n-empty v-else-if="!accountShareTypeOptions.length" :description="t('dashboard.typeAccounts.emptyAccounts')" />
+          <n-empty v-else :description="t('dashboard.typeAccounts.emptyBalance')" />
         </n-card>
 
-        <n-card class="bento__span-12 surface-panel" title="较上次快照变化">
+        <n-card class="bento__span-12 surface-panel" :title="t('dashboard.typeChange.title')">
           <template #header-extra>
             <span v-if="typeChange.latestDate && typeChange.previousDate" class="section-note">
               {{ typeChange.previousDate }} → {{ typeChange.latestDate }}
@@ -709,14 +722,14 @@ onBeforeUnmount(() => {
               {{ typeChangeSummary.label }} {{ formatAssetAmount(typeChangeSummary.value) }}
             </div>
           </div>
-          <div v-if="typeChangeHasData && typeChangeAllZero" class="section-note">两次快照之间各类型余额没有变化。</div>
+          <div v-if="typeChangeHasData && typeChangeAllZero" class="section-note">{{ t('dashboard.typeChange.noChange') }}</div>
           <v-chart
             v-else-if="typeChangeHasData"
             class="chart-frame--compact"
             :option="typeChangeOption"
             autoresize
           />
-          <n-empty v-else description="暂无可对比的类型变化" />
+          <n-empty v-else :description="t('dashboard.typeChange.empty')" />
         </n-card>
       </section>
     </n-spin>

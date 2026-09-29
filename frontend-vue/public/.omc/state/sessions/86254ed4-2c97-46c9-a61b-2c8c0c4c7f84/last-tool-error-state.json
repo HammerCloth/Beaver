@@ -1,0 +1,7 @@
+{
+  "tool_name": "mcp__Claude_Browser__browser_batch",
+  "tool_input_preview": "{\"actions\":[{\"name\":\"navigate\",\"input\":{\"tabId\":\"tab-4\",\"url\":\"http://localhost:5173/brand-picker.html\"}},{\"name\":\"resize_window\",\"input\":{\"tabId\":\"tab-4\",\"width\":1440,\"height\":900}},{\"name\":\"computer...",
+  "error": "actions[0] (navigate) failed: navigation to http://localhost:5173 was denied or failed (0 completed, 3 remaining)",
+  "timestamp": "2026-09-27T15:20:47.381Z",
+  "retry_count": 1
+}

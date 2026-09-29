@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { navIcons } from '@/components/navIcons'
 import BrandMark from '@/components/BrandMark.vue'
+import { currentLocale, switchLocale, t } from '@/i18n'
 
 const router = useRouter()
 const route = useRoute()
@@ -46,22 +47,39 @@ function item(label: string, key: string): MenuOption {
 }
 
 const menuOptions = computed<MenuOption[]>(() => {
-  const system: MenuOption[] = [item('AI 客户端', '/ai-clients'), item('设置', '/settings')]
+  const system: MenuOption[] = [item(t('nav.aiClients'), '/ai-clients'), item(t('nav.settings'), '/settings')]
   if (auth.isAdmin) {
-    system.push(item('用户管理', '/users'))
+    system.push(item(t('nav.users'), '/users'))
   }
   return [
-    { type: 'group', label: '资产', key: 'g-assets', children: [item('总览', '/dashboard'), item('快照', '/snapshots'), item('账户', '/accounts')] },
-    { type: 'group', label: '记录', key: 'g-records', children: [item('大事记', '/events'), item('礼金', '/gifts'), item('借款', '/loans')] },
-    { type: 'group', label: '系统', key: 'g-system', children: system },
+    {
+      type: 'group',
+      label: t('nav.groups.assets'),
+      key: 'g-assets',
+      children: [item(t('nav.dashboard'), '/dashboard'), item(t('nav.snapshots'), '/snapshots'), item(t('nav.accounts'), '/accounts')],
+    },
+    {
+      type: 'group',
+      label: t('nav.groups.records'),
+      key: 'g-records',
+      children: [item(t('nav.events'), '/events'), item(t('nav.gifts'), '/gifts'), item(t('nav.loans'), '/loans')],
+    },
+    { type: 'group', label: t('nav.groups.system'), key: 'g-system', children: system },
   ]
 })
 
-const userMenuOptions = [{ label: '退出登录', key: 'logout' }]
+/** 用户菜单：切换语言（显示另一种语言的名称）+ 退出登录 */
+const userMenuOptions = [
+  { label: t('nav.switchLanguage'), key: 'language' },
+  { type: 'divider', key: 'd1' },
+  { label: t('common.actions.logout'), key: 'logout' },
+]
 
 function onUserMenu(key: string) {
   if (key === 'logout') {
     onLogout()
+  } else if (key === 'language') {
+    switchLocale(currentLocale() === 'zh-CN' ? 'en-US' : 'zh-CN')
   }
 }
 
@@ -88,23 +106,23 @@ const activeKey = computed(() => {
 const pageTitle = computed(() => {
   switch (activeKey.value) {
     case '/dashboard':
-      return '总览'
+      return t('nav.dashboard')
     case '/snapshots':
-      return '快照'
+      return t('nav.snapshots')
     case '/accounts':
-      return '账户'
+      return t('nav.accounts')
     case '/events':
-      return '大事记'
+      return t('nav.events')
     case '/gifts':
-      return '礼金'
+      return t('nav.gifts')
     case '/loans':
-      return '借款'
+      return t('nav.loans')
     case '/ai-clients':
-      return 'AI 客户端'
+      return t('nav.aiClients')
     case '/settings':
-      return '设置'
+      return t('nav.settings')
     case '/users':
-      return '用户管理'
+      return t('nav.users')
     default:
       return 'Beaver'
   }
@@ -147,7 +165,7 @@ async function onLogout() {
           <BrandMark />
           <div v-if="!collapsed" class="app-brand__text">
             <span class="app-brand__title">Beaver</span>
-            <span class="app-brand__subtitle">个人资产看板</span>
+            <span class="app-brand__subtitle">{{ t('common.appTagline') }}</span>
           </div>
         </div>
         <n-menu
@@ -165,8 +183,8 @@ async function onLogout() {
           <button type="button" class="app-account">
             <span class="app-user__avatar">{{ userInitial }}</span>
             <span v-if="!collapsed" class="app-account__meta">
-              <span class="app-account__name">{{ auth.user?.username || '未登录' }}</span>
-              <span class="app-account__role">{{ auth.isAdmin ? '管理员' : '成员' }}</span>
+              <span class="app-account__name">{{ auth.user?.username || t('nav.notLoggedIn') }}</span>
+              <span class="app-account__role">{{ auth.isAdmin ? t('common.role.admin') : t('common.role.member') }}</span>
             </span>
             <svg v-if="!collapsed" class="app-account__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></svg>
           </button>
@@ -198,7 +216,7 @@ async function onLogout() {
         <BrandMark />
         <div class="app-brand__text">
           <span class="app-brand__title">Beaver</span>
-          <span class="app-brand__subtitle">个人资产看板</span>
+          <span class="app-brand__subtitle">{{ t('common.appTagline') }}</span>
         </div>
       </div>
       <n-menu

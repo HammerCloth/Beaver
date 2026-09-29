@@ -5,6 +5,7 @@ import type { OptionItem } from '@/api/settings'
 import { DIM_ACCOUNT_TYPE, DIM_ACCOUNT_OWNER, DIM_EVENT_CATEGORY, useSettingsStore } from '@/stores/settings'
 import { chartPalette } from '@/lib/chartTheme'
 import PageHeader from '@/components/PageHeader.vue'
+import { t } from '@/i18n'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -14,9 +15,24 @@ const editing = ref<Record<string, OptionItem[]>>({})
 const activeDim = ref(DIM_ACCOUNT_TYPE)
 
 const dims = [
-  { key: DIM_ACCOUNT_TYPE, label: '账户类型', hint: '决定账户如何归类；负债类（key 为 credit）按负值计入净资产。' },
-  { key: DIM_ACCOUNT_OWNER, label: '账户归属', hint: '账户属于谁，用于按人查看资产构成。' },
-  { key: DIM_EVENT_CATEGORY, label: '大事记分类', hint: '快照里记录收支事件时可选的分类。' },
+  {
+    key: DIM_ACCOUNT_TYPE,
+    label: t('settings.dims.accountType.label'),
+    save: t('settings.dims.accountType.save'),
+    hint: t('settings.dims.accountType.hint'),
+  },
+  {
+    key: DIM_ACCOUNT_OWNER,
+    label: t('settings.dims.accountOwner.label'),
+    save: t('settings.dims.accountOwner.save'),
+    hint: t('settings.dims.accountOwner.hint'),
+  },
+  {
+    key: DIM_EVENT_CATEGORY,
+    label: t('settings.dims.eventCategory.label'),
+    save: t('settings.dims.eventCategory.save'),
+    hint: t('settings.dims.eventCategory.hint'),
+  },
 ]
 
 /** 与 useCategoryColor 一致：按排序顺序取色，便于预览图表里的颜色 */
@@ -41,17 +57,17 @@ async function refresh() {
 }
 
 onMounted(() => {
-  refresh().catch(() => message.error('加载失败'))
+  refresh().catch(() => message.error(t('common.status.loadFailed')))
 })
 
 async function saveDim(dim: string) {
   try {
     await settings.saveDimension(dim, editing.value[dim] ?? [])
-    message.success('已保存')
+    message.success(t('common.status.saved'))
   } catch (e: unknown) {
     const data = (e as { response?: { data?: { error?: string } } })?.response?.data
     const msg = data?.error
-    message.error(typeof msg === 'string' ? msg : '保存失败（key 重复或仍有引用等）')
+    message.error(typeof msg === 'string' ? msg : t('settings.saveFailed'))
   }
 }
 
@@ -72,17 +88,17 @@ function removeRow(dim: string, index: number) {
 
 function onReset() {
   dialog.warning({
-    title: '恢复默认',
-    content: '将覆盖当前所有自定义选项，确定继续？',
-    positiveText: '恢复',
-    negativeText: '取消',
+    title: t('settings.resetDialog.title'),
+    content: t('settings.resetDialog.content'),
+    positiveText: t('settings.resetDialog.confirm'),
+    negativeText: t('common.actions.cancel'),
     onPositiveClick: async () => {
       try {
         await settings.reset()
         await refresh()
-        message.success('已恢复默认')
+        message.success(t('settings.resetDone'))
       } catch {
-        message.error('操作失败')
+        message.error(t('common.status.operationFailed'))
       }
     },
   })
@@ -91,9 +107,9 @@ function onReset() {
 
 <template>
   <div class="page-stack">
-    <PageHeader title="设置" description="维护各类选项，所有页面的标签、筛选与图表颜色都以这里为准。">
-      <n-button @click="refresh">重新加载</n-button>
-      <n-button secondary type="error" @click="onReset">恢复默认</n-button>
+    <PageHeader :title="t('settings.title')" :description="t('settings.description')">
+      <n-button @click="refresh">{{ t('settings.reload') }}</n-button>
+      <n-button secondary type="error" @click="onReset">{{ t('settings.resetDefaults') }}</n-button>
     </PageHeader>
 
     <n-spin :show="settings.loading">
@@ -104,24 +120,24 @@ function onReset() {
             <div v-if="editing[dim.key]" class="option-table">
               <div class="option-table__head">
                 <span />
-                <span>Key</span>
-                <span>显示名称</span>
-                <span>排序</span>
-                <span>启用</span>
+                <span>{{ t('settings.columns.key') }}</span>
+                <span>{{ t('settings.columns.label') }}</span>
+                <span>{{ t('settings.columns.sortOrder') }}</span>
+                <span>{{ t('settings.columns.enabled') }}</span>
                 <span />
               </div>
               <div v-for="(row, i) in editing[dim.key]" :key="i" class="option-table__row" :class="{ 'is-disabled': !row.enabled }">
                 <span class="swatch" :style="{ background: rowColor(dim.key, i) }" />
-                <n-input v-model:value="row.key" size="small" placeholder="英文 key" />
-                <n-input v-model:value="row.label" size="small" placeholder="显示名称" />
+                <n-input v-model:value="row.key" size="small" :placeholder="t('settings.keyPlaceholder')" />
+                <n-input v-model:value="row.label" size="small" :placeholder="t('settings.labelPlaceholder')" />
                 <n-input-number v-model:value="row.sortOrder" :input-props="{ inputmode: 'numeric' }" size="small" :show-button="false" />
                 <n-switch v-model:value="row.enabled" size="small" />
-                <n-button size="tiny" quaternary type="error" @click="removeRow(dim.key, i)">移除</n-button>
+                <n-button size="tiny" quaternary type="error" @click="removeRow(dim.key, i)">{{ t('settings.remove') }}</n-button>
               </div>
             </div>
             <div class="option-table__footer">
-              <n-button size="small" dashed @click="addRow(dim.key)">+ 新增选项</n-button>
-              <n-button size="small" type="primary" @click="saveDim(dim.key)">保存{{ dim.label }}</n-button>
+              <n-button size="small" dashed @click="addRow(dim.key)">{{ t('settings.addOption') }}</n-button>
+              <n-button size="small" type="primary" @click="saveDim(dim.key)">{{ dim.save }}</n-button>
             </div>
           </n-tab-pane>
         </n-tabs>

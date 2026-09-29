@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import * as authApi from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { t } from '@/i18n'
 
 const router = useRouter()
 const message = useMessage()
@@ -17,11 +18,11 @@ async function submit() {
   loading.value = true
   try {
     await authApi.changePassword(current.value, next.value)
-    message.success('已更新密码')
+    message.success(t('auth.changePassword.success'))
     await auth.refreshUser()
     await router.replace('/dashboard')
   } catch {
-    message.error('当前密码不正确或请求失败')
+    message.error(t('auth.changePassword.failed'))
   } finally {
     loading.value = false
   }
@@ -33,21 +34,21 @@ async function submit() {
     <div class="screen-card">
       <div class="page-stack">
         <div>
-          <span class="login-hero__badge">安全设置</span>
-          <h1 class="page-header__title" style="margin-top: 18px">修改密码</h1>
+          <span class="login-hero__badge">{{ t('auth.changePassword.badge') }}</span>
+          <h1 class="page-header__title" style="margin-top: 18px">{{ t('auth.changePassword.title') }}</h1>
           <p class="page-header__desc" style="margin-top: 8px">
-            首次登录后需要先更新密码，完成后会自动返回总览页。
+            {{ t('auth.changePassword.desc') }}
           </p>
         </div>
-        <n-alert type="info">登录后需修改密码方可继续使用。</n-alert>
+        <n-alert type="info">{{ t('auth.changePassword.alert') }}</n-alert>
         <n-form @submit.prevent="submit">
-          <n-form-item label="当前密码">
+          <n-form-item :label="t('auth.changePassword.current')">
             <n-input v-model:value="current" type="password" show-password-on="click" />
           </n-form-item>
-          <n-form-item label="新密码（至少 8 位）">
+          <n-form-item :label="t('auth.changePassword.next')">
             <n-input v-model:value="next" type="password" show-password-on="click" />
           </n-form-item>
-          <n-button type="primary" block :loading="loading" attr-type="submit">保存新密码</n-button>
+          <n-button type="primary" block :loading="loading" attr-type="submit">{{ t('auth.changePassword.submit') }}</n-button>
         </n-form>
       </div>
     </div>
