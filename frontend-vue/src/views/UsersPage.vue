@@ -4,9 +4,12 @@ import { useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import type { User } from '@/types/models'
 import * as userApi from '@/api/user'
+import { mobileCardColumns } from '@/lib/mobileCard'
+import { useIsMobile } from '@/composables/useIsMobile'
 import PageHeader from '@/components/PageHeader.vue'
 
 const message = useMessage()
+const { isMobile } = useIsMobile()
 const rows = ref<User[]>([])
 const loading = ref(true)
 const showCreate = ref(false)
@@ -90,6 +93,20 @@ const columns: DataTableColumns<User> = [
     render: (row) => h('button', { class: 'text-action', onClick: () => openPwd(row) }, '重置密码'),
   },
 ]
+
+const cardColumns = mobileCardColumns<User>((row) => ({
+  title: h('span', { class: 'cell-name' }, [
+    h('span', { class: 'app-user__avatar' }, row.username.slice(0, 1).toUpperCase()),
+    h('span', { class: 'cell-main' }, row.username),
+  ]),
+  value: h('button', { class: 'text-action', onClick: () => openPwd(row) }, '重置密码'),
+  meta: [
+    h('span', { class: ['badge', row.is_admin ? 'badge--accent' : ''] }, row.is_admin ? '管理员' : '成员'),
+    row.must_change_password
+      ? h('span', { class: 'badge badge--warning' }, '待首次改密')
+      : h('span', { class: 'badge badge--positive' }, '正常'),
+  ],
+}))
 </script>
 
 <template>
@@ -102,7 +119,12 @@ const columns: DataTableColumns<User> = [
         <template #header>
           全部用户 <span class="section-note">· {{ rows.length }} 人</span>
         </template>
-        <n-data-table :columns="columns" :data="rows" :row-key="(r: User) => r.id" />
+        <n-data-table
+          :class="{ 'data-table--cards': isMobile }"
+          :columns="isMobile ? cardColumns : columns"
+          :data="rows"
+          :row-key="(r: User) => r.id"
+        />
       </n-card>
     </n-spin>
     <n-modal v-model:show="showCreate" preset="card" title="新建用户" style="width: 440px">

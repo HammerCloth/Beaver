@@ -10,10 +10,13 @@ import type { DataTableColumns } from 'naive-ui'
 import type { GiftRecipient, GiftRecord } from '@/types/models'
 import * as giftApi from '@/api/gift'
 import { formatMoney } from '@/lib/format'
+import { mobileCardColumns } from '@/lib/mobileCard'
+import { useIsMobile } from '@/composables/useIsMobile'
 
 provide(THEME_KEY, CHART_THEME)
 
 const message = useMessage()
+const { isMobile } = useIsMobile()
 const dialog = useDialog()
 const currentYear = new Date().getFullYear()
 const year = ref(currentYear)
@@ -95,14 +98,31 @@ const recordColumns: DataTableColumns<GiftRecord> = [
   { title: '实际承担', key: 'amount', width: 120, align: 'right', render: (row) => h('span', { class: 'amount' }, formatMoney(row.amount)) },
   {
     title: '', key: 'actions', width: 110, align: 'right',
-    render(row) {
-      return h('div', { class: 'table-actions' }, [
-        h('button', { class: 'text-action', onClick: () => openEditRecord(row) }, '编辑'),
-        h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteRecord(row) }, '删除'),
-      ])
-    },
+    render: (row) => h('div', { class: 'table-actions' }, recordActions(row)),
   },
 ]
+
+function recordActions(row: GiftRecord) {
+  return [
+    h('button', { class: 'text-action', onClick: () => openEditRecord(row) }, '编辑'),
+    h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteRecord(row) }, '删除'),
+  ]
+}
+
+const recordCardColumns = mobileCardColumns<GiftRecord>((row) => ({
+  title: [
+    h('a', { class: 'text-action', onClick: () => openRecipientDetail(row.gift_recipient_id) }, row.recipient_name),
+    row.note ? h('span', { class: 'cell-muted' }, row.note) : null,
+  ],
+  value: h('span', { class: 'amount' }, formatMoney(row.amount)),
+  meta: [
+    h('span', { class: 'badge badge--plain' }, row.occasion),
+    row.gift_date,
+    row.recipient_relationship,
+    row.payment_method,
+  ],
+  actions: recordActions(row),
+}))
 
 async function load() {
   loading.value = true
@@ -298,7 +318,13 @@ function apiMessage(error: unknown, fallback: string) {
         <template #header>
           礼金明细 <span class="section-note">· {{ records.length }} 笔</span>
         </template>
-        <n-data-table :columns="recordColumns" :data="records" :row-key="(row: GiftRecord) => row.id" :scroll-x="940" />
+        <n-data-table
+          :class="{ 'data-table--cards': isMobile }"
+          :columns="isMobile ? recordCardColumns : recordColumns"
+          :data="records"
+          :row-key="(row: GiftRecord) => row.id"
+          :scroll-x="isMobile ? undefined : 940"
+        />
         <n-empty v-if="!loading && !records.length" class="panel-empty" description="还没有符合条件的礼金记录" />
       </n-card>
     </n-spin>

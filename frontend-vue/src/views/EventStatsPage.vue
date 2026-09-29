@@ -7,6 +7,8 @@ import { THEME_KEY } from 'vue-echarts'
 import { CHART_THEME } from '@/lib/chartTheme'
 import * as eventApi from '@/api/event'
 import { formatMoney, formatSignedMoney } from '@/lib/format'
+import { mobileCardColumns } from '@/lib/mobileCard'
+import { useIsMobile } from '@/composables/useIsMobile'
 import { DIM_EVENT_CATEGORY, useSettingsStore } from '@/stores/settings'
 import { useCategoryColor } from '@/composables/useCategoryColor'
 import PageHeader from '@/components/PageHeader.vue'
@@ -18,6 +20,7 @@ provide(THEME_KEY, CHART_THEME)
 const message = useMessage()
 const router = useRouter()
 const settings = useSettingsStore()
+const { isMobile } = useIsMobile()
 const { categoryColor } = useCategoryColor()
 const year = ref(new Date().getFullYear())
 const byCategory = ref<Record<string, number>>({})
@@ -87,6 +90,18 @@ const columns: DataTableColumns<eventApi.EventItem> = [
       h('span', { class: ['amount', row.amount < 0 ? 'amount--negative' : 'amount--positive'] }, formatSignedMoney(row.amount)),
   },
 ]
+
+const cardColumns = mobileCardColumns<eventApi.EventItem>((row) => ({
+  title: h('span', { class: 'cell-name' }, [
+    h('span', { class: 'swatch', style: { background: categoryColor(DIM_EVENT_CATEGORY, row.category) } }),
+    settings.label(DIM_EVENT_CATEGORY, row.category),
+  ]),
+  value: h('span', { class: ['amount', row.amount < 0 ? 'amount--negative' : 'amount--positive'] }, formatSignedMoney(row.amount)),
+  meta: [
+    h('button', { class: 'text-action', onClick: () => router.push(`/snapshots/${row.snapshotId}`) }, row.date),
+    row.description,
+  ],
+}))
 
 const items = computed<DonutItem[]>(() =>
   Object.entries(byCategory.value).map(([category, amount]) => ({
@@ -180,11 +195,12 @@ onMounted(load)
           </div>
         </template>
         <n-data-table
-          :columns="columns"
+          :class="{ 'data-table--cards': isMobile }"
+          :columns="isMobile ? cardColumns : columns"
           :data="filteredEvents"
           :row-key="(row: eventApi.EventItem) => row.id"
           :pagination="filteredEvents.length > 15 ? { pageSize: 15 } : false"
-          :scroll-x="720"
+          :scroll-x="isMobile ? undefined : 720"
         />
         <n-empty v-if="!loading && !filteredEvents.length" class="panel-empty" description="没有符合条件的大事记" />
       </n-card>

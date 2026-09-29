@@ -5,11 +5,14 @@ import type { DataTableColumns } from 'naive-ui'
 import type { Loan, LoanRepayment } from '@/types/models'
 import * as loanApi from '@/api/loan'
 import { formatMoney } from '@/lib/format'
+import { mobileCardColumns } from '@/lib/mobileCard'
+import { useIsMobile } from '@/composables/useIsMobile'
 import PageHeader from '@/components/PageHeader.vue'
 import StatStrip from '@/components/StatStrip.vue'
 
 const message = useMessage()
 const dialog = useDialog()
+const { isMobile } = useIsMobile()
 const currentYear = new Date().getFullYear()
 const year = ref(currentYear)
 const keyword = ref('')
@@ -66,6 +69,33 @@ const statItems = computed(() => [
   { label: `${stats.value.year} 年收回`, value: formatMoney(stats.value.repaidThisYear), tone: stats.value.repaidThisYear > 0 ? ('positive' as const) : ('' as const) },
 ])
 
+function progressCell(row: Loan) {
+  const pct = row.amount > 0 ? Math.min(100, (row.repaid_total / row.amount) * 100) : 0
+  return h('div', { class: 'progress-cell' }, [
+    h('div', { class: 'progress-cell__track' }, [
+      h('div', { class: ['progress-cell__fill', row.settled ? 'is-done' : ''], style: { width: `${pct}%` } }),
+    ]),
+    h('span', { class: 'progress-cell__label' }, `${formatMoney(row.repaid_total)} · ${pct.toFixed(0)}%`),
+  ])
+}
+
+function statusBadge(row: Loan) {
+  if (row.settled) {
+    return h('span', { class: 'badge badge--positive' }, '已还清')
+  }
+  return isOverdue(row)
+    ? h('span', { class: 'badge badge--negative' }, '已逾期')
+    : h('span', { class: 'badge badge--warning' }, '未还清')
+}
+
+function loanActions(row: Loan) {
+  return [
+    h('button', { class: 'text-action', onClick: () => openLoanDetail(row.id) }, '还款'),
+    h('button', { class: 'text-action', onClick: () => openEditLoan(row) }, '编辑'),
+    h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteLoan(row) }, '删除'),
+  ]
+}
+
 const loanColumns: DataTableColumns<Loan> = [
   {
     title: '借款人',
@@ -89,15 +119,7 @@ const loanColumns: DataTableColumns<Loan> = [
     title: '还款进度',
     key: 'repaid_total',
     width: 170,
-    render(row) {
-      const pct = row.amount > 0 ? Math.min(100, (row.repaid_total / row.amount) * 100) : 0
-      return h('div', { class: 'progress-cell' }, [
-        h('div', { class: 'progress-cell__track' }, [
-          h('div', { class: ['progress-cell__fill', row.settled ? 'is-done' : ''], style: { width: `${pct}%` } }),
-        ]),
-        h('span', { class: 'progress-cell__label' }, `${formatMoney(row.repaid_total)} · ${pct.toFixed(0)}%`),
-      ])
-    },
+    render: progressCell,
   },
   {
     title: '剩余',
@@ -110,29 +132,35 @@ const loanColumns: DataTableColumns<Loan> = [
     title: '状态',
     key: 'settled',
     width: 96,
-    render(row) {
-      if (row.settled) {
-        return h('span', { class: 'badge badge--positive' }, '已还清')
-      }
-      return isOverdue(row)
-        ? h('span', { class: 'badge badge--negative' }, '已逾期')
-        : h('span', { class: 'badge badge--warning' }, '未还清')
-    },
+    render: statusBadge,
   },
   {
     title: '',
     key: 'actions',
     width: 160,
     align: 'right',
-    render(row) {
-      return h('div', { class: 'table-actions' }, [
-        h('button', { class: 'text-action', onClick: () => openLoanDetail(row.id) }, '还款'),
-        h('button', { class: 'text-action', onClick: () => openEditLoan(row) }, '编辑'),
-        h('button', { class: 'text-action text-action--danger', onClick: () => confirmDeleteLoan(row) }, '删除'),
-      ])
-    },
+    render: (row) => h('div', { class: 'table-actions' }, loanActions(row)),
   },
 ]
+
+const loanCardColumns = mobileCardColumns<Loan>((row) => ({
+  title: [
+    h('button', { class: 'text-action cell-main', style: 'text-align: left', onClick: () => openLoanDetail(row.id) }, row.borrower_name),
+    row.relationship ? h('span', { class: 'cell-muted' }, row.relationship) : null,
+  ],
+  value: [
+    h('span', { class: 'cell-muted' }, '剩余 '),
+    h('span', { class: ['amount', row.remaining > 0 ? '' : 'amount--muted'] }, formatMoney(row.remaining)),
+  ],
+  meta: [
+    statusBadge(row),
+    `借 ${row.loan_date}`,
+    row.due_date ? h('span', { class: isOverdue(row) ? 'text-danger' : '' }, `约定 ${row.due_date}`) : null,
+    `本金 ${formatMoney(row.amount)}`,
+  ],
+  extra: progressCell(row),
+  actions: loanActions(row),
+}))
 
 async function load() {
   loading.value = true
@@ -316,7 +344,13 @@ function apiMessage(error: unknown, fallback: string) {
         <template #header>
           借款明细 <span class="section-note">· {{ loans.length }} 笔</span>
         </template>
-        <n-data-table :columns="loanColumns" :data="loans" :row-key="(row: Loan) => row.id" :scroll-x="1040" />
+        <n-data-table
+          :class="{ 'data-table--cards': isMobile }"
+          :columns="isMobile ? loanCardColumns : loanColumns"
+          :data="loans"
+          :row-key="(row: Loan) => row.id"
+          :scroll-x="isMobile ? undefined : 1040"
+        />
         <n-empty v-if="!loading && !loans.length" class="panel-empty" description="还没有符合条件的借款记录" />
       </n-card>
     </n-spin>
