@@ -20,6 +20,27 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# 与后端 JwtSecretGuard 一致：缺失、仍为公开默认值或短于 32 字节时，在构建前就停下
+check_secret() {
+  local name="$1" value
+  # 兼容 `export NAME=...`、首尾引号；没有这一行时 value 为空
+  value="$( (grep -E "^[[:space:]]*(export[[:space:]]+)?${name}=" .env || true) | tail -n 1 | cut -d= -f2- \
+    | sed -e 's/[[:space:]]*$//' -e 's/^["'"'"']//' -e 's/["'"'"']$//')"
+  case "$value" in
+    "" | dev-access-secret-change-in-production | dev-refresh-secret-change-in-production | \
+      change-this-access-secret | change-this-refresh-secret)
+      echo "错误：.env 中的 ${name} 未设置或仍是公开默认值，请改为随机长字符串（例如 openssl rand -base64 48）"
+      exit 1
+      ;;
+  esac
+  if (( ${#value} < 32 )); then
+    echo "错误：.env 中的 ${name} 太短，至少需要 32 个字符"
+    exit 1
+  fi
+}
+check_secret JWT_ACCESS_SECRET
+check_secret JWT_REFRESH_SECRET
+
 if [[ ! -d frontend-vue ]]; then
   echo "错误：未找到 frontend-vue 目录（应在项目根目录下执行本脚本）"
   exit 1
