@@ -54,8 +54,10 @@ jobs:
           script: |
             set -euo pipefail
             cd "$DEPLOY_PATH"
-            git fetch origin
-            git pull --ff-only origin main
+            # 对齐到远端 main（而不是 pull --ff-only）：仓库历史改写过时也能部署；
+            # .env、backups/ 等未跟踪文件不受影响
+            git fetch origin main
+            git reset --hard origin/main
             GIT_PULL=0 ./scripts/deploy.sh
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
