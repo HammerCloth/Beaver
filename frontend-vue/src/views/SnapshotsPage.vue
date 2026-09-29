@@ -6,6 +6,8 @@ import type { DataTableColumns } from 'naive-ui'
 import type { SnapshotListItem } from '@/types/models'
 import * as snapshotApi from '@/api/snapshot'
 import { amountTone, formatMoney, formatSignedMoney } from '@/lib/format'
+import { mobileCardColumns } from '@/lib/mobileCard'
+import { useIsMobile } from '@/composables/useIsMobile'
 import PageHeader from '@/components/PageHeader.vue'
 import StatStrip from '@/components/StatStrip.vue'
 import SnapshotViewSwitch from '@/components/SnapshotViewSwitch.vue'
@@ -14,6 +16,7 @@ type Row = SnapshotListItem & { change: number | null }
 
 const router = useRouter()
 const message = useMessage()
+const { isMobile } = useIsMobile()
 const rows = ref<SnapshotListItem[]>([])
 const loading = ref(true)
 
@@ -42,6 +45,14 @@ const stats = computed(() => {
   ]
 })
 
+function changeCell(row: Row) {
+  if (row.change === null) {
+    return h('span', { class: 'amount amount--muted' }, '首次记录')
+  }
+  const tone = amountTone(row.change)
+  return h('span', { class: ['amount', tone ? `amount--${tone}` : 'amount--muted'] }, formatSignedMoney(row.change))
+}
+
 const columns: DataTableColumns<Row> = [
   {
     title: '日期',
@@ -58,13 +69,7 @@ const columns: DataTableColumns<Row> = [
     title: '较上次',
     key: 'change',
     align: 'right',
-    render(row) {
-      if (row.change === null) {
-        return h('span', { class: 'amount amount--muted' }, '首次记录')
-      }
-      const tone = amountTone(row.change)
-      return h('span', { class: ['amount', tone ? `amount--${tone}` : 'amount--muted'] }, formatSignedMoney(row.change))
-    },
+    render: changeCell,
   },
   {
     title: '记录时间',
@@ -73,6 +78,11 @@ const columns: DataTableColumns<Row> = [
     render: (row) => h('span', { class: 'cell-muted' }, row.createdAt),
   },
 ]
+
+const cardColumns = mobileCardColumns<Row>((row) => ({
+  title: [h('span', { class: 'cell-main' }, row.date), h('span', { class: 'cell-muted' }, `记录于 ${row.createdAt}`)],
+  value: [h('div', { class: 'amount' }, formatMoney(row.netWorth)), h('div', { class: 'cell-muted' }, changeCell(row))],
+}))
 
 onMounted(async () => {
   try {
@@ -104,7 +114,8 @@ function rowProps(row: Row) {
     <n-card class="surface-panel surface-panel--flush" title="全部快照">
       <n-data-table
         :loading="loading"
-        :columns="columns"
+        :class="{ 'data-table--cards': isMobile }"
+        :columns="isMobile ? cardColumns : columns"
         :data="tableRows"
         :row-props="rowProps"
         :row-key="(row: Row) => row.id"

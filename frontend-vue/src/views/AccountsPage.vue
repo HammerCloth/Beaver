@@ -102,10 +102,16 @@ async function deactivate(row: Account) {
                 <span class="drag-handle" title="拖动排序">
                   <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" /></svg>
                 </span>
-                <span class="swatch" :style="{ background: categoryColor(DIM_ACCOUNT_TYPE, element.type) }" />
-                <strong>{{ element.name }}</strong>
-                <span class="badge badge--plain">{{ settings.label(DIM_ACCOUNT_TYPE, element.type) }}</span>
-                <span class="badge badge--plain badge--accent">{{ settings.label(DIM_ACCOUNT_OWNER, element.owner) }}</span>
+                <div class="account-row__info">
+                  <span class="account-row__name">
+                    <span class="swatch" :style="{ background: categoryColor(DIM_ACCOUNT_TYPE, element.type) }" />
+                    <strong>{{ element.name }}</strong>
+                  </span>
+                  <span class="account-row__tags">
+                    <span class="badge badge--plain">{{ settings.label(DIM_ACCOUNT_TYPE, element.type) }}</span>
+                    <span class="badge badge--plain badge--accent">{{ settings.label(DIM_ACCOUNT_OWNER, element.owner) }}</span>
+                  </span>
+                </div>
               </div>
               <div class="account-row__meta">
                 <span>#{{ element.sort_order }}</span>

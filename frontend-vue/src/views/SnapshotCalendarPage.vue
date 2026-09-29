@@ -35,6 +35,11 @@ snapshotApi
 
 const monthCount = computed(() => snapshotDates.value.size)
 
+/** 手机端格子放不下金额，在日历下方按日期倒序列出本月快照 */
+const monthSnapshots = computed(() =>
+  [...snapshotDates.value].sort((a, b) => b.localeCompare(a)).map((date) => ({ date, netWorth: netWorthByDate.value[date] })),
+)
+
 function compactMoney(v: number) {
   return Math.abs(v) >= 10000 ? `¥${(v / 10000).toFixed(2)}万` : formatMoney(v)
 }
@@ -153,6 +158,14 @@ watch(
           </button>
         </template>
       </div>
+      <div class="cal-month-list">
+        <div class="cal-month-list__title">本月快照</div>
+        <button v-for="s in monthSnapshots" :key="s.date" type="button" class="cal-month-list__item" @click="onPick(s.date)">
+          <span class="cell-main">{{ s.date }}</span>
+          <span class="amount">{{ s.netWorth != null ? formatMoney(s.netWorth) : '已记录' }}</span>
+        </button>
+        <p v-if="!monthSnapshots.length" class="cal-month-list__empty">本月还没有快照，点击日期即可新建</p>
+      </div>
     </n-card>
   </div>
 </template>
@@ -260,28 +273,78 @@ watch(
   opacity: 1;
 }
 
+.cal-month-list {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .cal-cell {
-    min-height: 56px;
+    min-height: 44px;
   }
 
   .cal-day {
-    padding: 6px;
-  }
-
-  .day-value {
+    align-items: center;
+    justify-content: center;
     padding: 0;
-    background: none;
-    font-size: 0;
   }
 
-  .day-value::after {
-    content: "";
-    display: block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
+  .day-num {
+    min-width: 30px;
+    height: 30px;
+  }
+
+  /* 金额放到下方列表，格子里只用高亮日期表示已记录 */
+  .day-value,
+  .day-add {
+    display: none;
+  }
+
+  .cal-day.has-snap .day-num {
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-weight: 700;
+  }
+
+  .cal-day.is-today.has-snap .day-num {
+    background: var(--text-1);
+    color: #ffffff;
+    box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent);
+  }
+
+  .cal-month-list {
+    display: flex;
+    flex-direction: column;
+    margin-top: 16px;
+  }
+
+  .cal-month-list__title {
+    padding-bottom: 6px;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .cal-month-list__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border: 0;
+    border-top: 1px solid var(--line-soft);
+    background: none;
+    color: var(--text-1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .cal-month-list__empty {
+    margin: 0;
+    padding: 12px 0;
+    border-top: 1px solid var(--line-soft);
+    color: var(--text-3);
+    font-size: 13px;
   }
 }
 </style>

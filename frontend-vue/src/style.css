@@ -1015,6 +1015,28 @@ select {
   font-weight: 500;
 }
 
+.account-row__info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.account-row__name,
+.account-row__tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.account-row__name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .account-row__meta {
   color: var(--text-3);
   font-size: 12px;
@@ -1511,7 +1533,23 @@ select {
 
   .account-row__actions {
     flex-wrap: nowrap;
+    flex-shrink: 0;
     gap: 0;
+  }
+
+  .account-row__main {
+    flex-wrap: nowrap;
+  }
+
+  /* 名称一行、类型与归属一行，避免标签时而同行时而折行 */
+  .account-row__info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .account-row__tags {
+    gap: 6px;
   }
 
   .filter-bar > .filter-bar__fixed,
