@@ -114,7 +114,7 @@ function onReset() {
                 <span class="swatch" :style="{ background: rowColor(dim.key, i) }" />
                 <n-input v-model:value="row.key" size="small" placeholder="英文 key" />
                 <n-input v-model:value="row.label" size="small" placeholder="显示名称" />
-                <n-input-number v-model:value="row.sortOrder" size="small" :show-button="false" />
+                <n-input-number v-model:value="row.sortOrder" :input-props="{ inputmode: 'numeric' }" size="small" :show-button="false" />
                 <n-switch v-model:value="row.enabled" size="small" />
                 <n-button size="tiny" quaternary type="error" @click="removeRow(dim.key, i)">移除</n-button>
               </div>

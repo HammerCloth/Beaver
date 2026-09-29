@@ -291,7 +291,7 @@ function apiMessage(error: unknown, fallback: string) {
     </PageHeader>
 
     <div class="filter-bar">
-      <n-input-number v-model:value="year" class="filter-bar__year" :min="2000" :max="2100" />
+      <n-input-number v-model:value="year" :input-props="{ inputmode: 'numeric' }" class="filter-bar__year" :min="2000" :max="2100" />
       <n-input v-model:value="keyword" class="filter-bar__grow" clearable placeholder="搜索对象、场合或备注" @keyup.enter="onSearch">
         <template #prefix>
           <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -334,7 +334,7 @@ function apiMessage(error: unknown, fallback: string) {
         <n-form-item label="礼金对象" required><n-select v-model:value="recordForm.recipientId" filterable :options="recipientOptions" /></n-form-item>
         <n-form-item label="场合" required><n-input v-model:value="recordForm.occasion" placeholder="例如：结婚、满月、乔迁" /></n-form-item>
         <n-form-item label="礼金日期" required><n-date-picker v-model:formatted-value="recordForm.giftDate" value-format="yyyy-MM-dd" type="date" clearable /></n-form-item>
-        <n-form-item label="实际承担" required><n-input-number v-model:value="recordForm.amount" :min="0.01" :precision="2" style="width: 100%"><template #prefix>¥</template></n-input-number></n-form-item>
+        <n-form-item label="实际承担" required><n-input-number v-model:value="recordForm.amount" :input-props="{ inputmode: 'decimal' }" :min="0.01" :precision="2" style="width: 100%"><template #prefix>¥</template></n-input-number></n-form-item>
         <n-form-item label="支付方式"><n-input v-model:value="recordForm.paymentMethod" placeholder="微信、现金、银行卡等" /></n-form-item>
         <n-form-item label="备注"><n-input v-model:value="recordForm.note" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></n-form-item>
       </n-form>

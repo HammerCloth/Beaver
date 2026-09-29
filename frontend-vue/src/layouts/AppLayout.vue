@@ -132,7 +132,7 @@ async function onLogout() {
 </script>
 
 <template>
-  <n-layout class="app-shell" has-sider position="absolute" style="height: 100vh">
+  <n-layout class="app-shell" has-sider position="absolute">
     <n-layout-sider
       v-if="!mobile"
       bordered

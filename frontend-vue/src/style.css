@@ -92,6 +92,43 @@ a {
   color: inherit;
 }
 
+/* =========================================================
+   iOS / 触摸屏
+   ========================================================= */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 整页不回弹，避免在主屏幕 App 里把顶栏一起拖下来；内容区自身仍可滚动 */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+/* 去掉双击缩放带来的点击延迟，并关闭长按弹出的系统菜单 */
+button,
+a,
+.n-button,
+.n-menu-item,
+.n-radio-button,
+.n-data-table-tr--clickable,
+.cal-day,
+.drag-handle {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+button,
+.n-button,
+.n-menu-item,
+.n-radio-button,
+.drag-handle {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 button,
 input,
 textarea,
@@ -110,6 +147,8 @@ select {
    ========================================================= */
 
 .app-shell {
+  height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
   min-height: 100dvh;
   background: transparent;
@@ -295,8 +334,9 @@ select {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 52px;
-  padding: 0 12px;
+  /* viewport-fit=cover 下为刘海 / 灵动岛与横屏两侧留出安全区 */
+  height: calc(52px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
   border-bottom: 1px solid var(--line-soft);
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: saturate(180%) blur(12px);
@@ -1106,7 +1146,8 @@ select {
 
 .action-bar {
   position: sticky;
-  bottom: 16px;
+  /* 让出 iPhone 底部横条 */
+  bottom: calc(16px + env(safe-area-inset-bottom));
   z-index: 5;
   display: flex;
   align-items: center;
@@ -1447,7 +1488,18 @@ select {
   }
 
   .app-content {
-    padding: 20px 16px 40px;
+    padding: 20px max(16px, env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+
+  /* iOS 在输入框字号小于 16px 时聚焦会自动放大页面 */
+  .n-input {
+    --n-font-size: 16px !important;
+  }
+
+  .n-drawer .app-sidebar {
+    padding-top: calc(16px + env(safe-area-inset-top));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
   .page-header {
@@ -1605,7 +1657,8 @@ select {
 
 @media (max-width: 560px) {
   .login-shell {
-    padding: 14px;
+    padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+      max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
   }
 
   .login-hero {

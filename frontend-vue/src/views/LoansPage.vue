@@ -333,7 +333,7 @@ function apiMessage(error: unknown, fallback: string) {
           <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         </template>
       </n-input>
-      <n-input-number v-model:value="year" class="filter-bar__year" :min="2000" :max="2100" />
+      <n-input-number v-model:value="year" :input-props="{ inputmode: 'numeric' }" class="filter-bar__year" :min="2000" :max="2100" />
       <n-button @click="onSearch">筛选</n-button>
     </div>
 
@@ -364,7 +364,7 @@ function apiMessage(error: unknown, fallback: string) {
           <n-input v-model:value="loanForm.relationship" placeholder="例如：亲戚、同事、朋友" />
         </n-form-item>
         <n-form-item label="本金" required>
-          <n-input-number v-model:value="loanForm.amount" :min="0.01" :precision="2" style="width: 100%">
+          <n-input-number v-model:value="loanForm.amount" :input-props="{ inputmode: 'decimal' }" :min="0.01" :precision="2" style="width: 100%">
             <template #prefix>¥</template>
           </n-input-number>
         </n-form-item>
@@ -400,7 +400,7 @@ function apiMessage(error: unknown, fallback: string) {
         <h3 class="loan-drawer-title">{{ editingRepayment ? '编辑还款' : '登记还款' }}</h3>
         <n-form label-placement="left" label-width="76">
           <n-form-item label="金额" required>
-            <n-input-number v-model:value="repaymentForm.amount" :min="0.01" :precision="2" :max="detailLoan.remaining + (editingRepayment?.amount ?? 0)" style="width: 100%">
+            <n-input-number v-model:value="repaymentForm.amount" :input-props="{ inputmode: 'decimal' }" :min="0.01" :precision="2" :max="detailLoan.remaining + (editingRepayment?.amount ?? 0)" style="width: 100%">
               <template #prefix>¥</template>
             </n-input-number>
           </n-form-item>

@@ -165,7 +165,7 @@ onMounted(load)
   <div class="page-stack">
     <PageHeader title="大事记" description="汇总快照中记录的年度支出事件，看钱主要花在了哪里。">
       <n-button quaternary @click="shiftYear(-1)">‹</n-button>
-      <n-input-number v-model:value="year" style="width: 84px; text-align: center" :min="2000" :max="2100" :show-button="false" />
+      <n-input-number v-model:value="year" :input-props="{ inputmode: 'numeric' }" style="width: 84px; text-align: center" :min="2000" :max="2100" :show-button="false" />
       <n-button quaternary @click="shiftYear(1)">›</n-button>
     </PageHeader>
 

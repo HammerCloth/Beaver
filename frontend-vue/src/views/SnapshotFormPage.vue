@@ -339,6 +339,7 @@ onMounted(async () => {
           <span class="fx-rate__label">1 {{ c }} =</span>
           <n-input-number
             v-model:value="fxRates[c]"
+            :input-props="{ inputmode: 'decimal' }"
             class="fx-rate__input"
             @update:value="fxEdited[c] = true"
             :show-button="false"
@@ -383,6 +384,7 @@ onMounted(async () => {
               />
               <n-input-number
                 v-model:value="balances[a.id]"
+                :input-props="{ inputmode: 'decimal' }"
                 :show-button="false"
                 :status="balances[a.id] == null ? 'warning' : undefined"
                 placeholder="0.00"
@@ -410,7 +412,7 @@ onMounted(async () => {
             <n-radio-button value="out">支出</n-radio-button>
             <n-radio-button value="in">收入</n-radio-button>
           </n-radio-group>
-          <n-input-number v-model:value="ev.absAmount" placeholder="金额" :min="0" :show-button="false">
+          <n-input-number v-model:value="ev.absAmount" :input-props="{ inputmode: 'decimal' }" placeholder="金额" :min="0" :show-button="false">
             <template #prefix>¥</template>
           </n-input-number>
           <n-button quaternary type="error" @click="removeEvent(i)">移除</n-button>
