@@ -17,20 +17,25 @@ public final class BalanceLogic {
     return input;
   }
 
-  /** 计算净资产：负债按负值计入 */
-  public static double netWorth(List<SnapshotItem> items, Map<String, Account> accountsById) {
+  /** 计算净资产（本币）：负债按负值计入，外币按快照日期汇率折算 */
+  public static double netWorth(List<SnapshotItem> items, Map<String, Account> accountsById, FxTable fx, String date) {
     double sum = 0;
     for (SnapshotItem it : items) {
       Account a = accountsById.get(it.getAccountId());
       if (a == null) {
         continue;
       }
-      sum += effectiveBalance(a.getType(), it.getBalance());
+      sum += baseBalance(a.getType(), it, fx, date);
     }
     return sum;
   }
 
   public static double effectiveBalance(String accountType, double stored) {
     return "credit".equals(accountType) ? -Math.abs(stored) : stored;
+  }
+
+  /** 折合本币后的有效余额 */
+  public static double baseBalance(String accountType, SnapshotItem it, FxTable fx, String date) {
+    return effectiveBalance(accountType, it.getBalance()) * fx.rate(it.getCurrency(), date);
   }
 }

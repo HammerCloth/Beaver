@@ -1,6 +1,7 @@
 package com.zero.service;
 
 import com.zero.domain.Account;
+import com.zero.domain.Currency;
 import com.zero.domain.MajorFinancialEvent;
 import com.zero.domain.Snapshot;
 import com.zero.domain.SnapshotEvent;
@@ -10,43 +11,57 @@ import com.zero.mapper.SnapshotMapper;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class SnapshotService {
 
-  public record ItemIn(String accountId, Double balance) {}
+  /** balance 为原币金额，currency 为空时按本币 */
+  public record ItemIn(String accountId, Double balance, Currency currency) {}
 
   public record EventIn(String category, String description, Double amount) {}
 
   private final SnapshotMapper snapshotMapper;
   private final AccountMapper accountMapper;
   private final UserOptionService userOptionService;
+  private final FxRateService fxRateService;
+  private final TransactionTemplate tx;
 
   public SnapshotService(
-      SnapshotMapper snapshotMapper, AccountMapper accountMapper, UserOptionService userOptionService) {
+      SnapshotMapper snapshotMapper,
+      AccountMapper accountMapper,
+      UserOptionService userOptionService,
+      FxRateService fxRateService,
+      PlatformTransactionManager transactionManager) {
     this.snapshotMapper = snapshotMapper;
     this.accountMapper = accountMapper;
     this.userOptionService = userOptionService;
+    this.fxRateService = fxRateService;
+    this.tx = new TransactionTemplate(transactionManager);
   }
 
   public List<Map<String, Object>> listSummaries(String userId) {
     Map<String, Account> accounts = loadAccountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     List<Map<String, Object>> out = new ArrayList<>();
     for (Snapshot s : snapshotMapper.listSnapshotsByUser(userId)) {
       List<SnapshotItem> items = snapshotMapper.listItems(s.getId());
-      double nw = BalanceLogic.netWorth(items, accounts);
+      double nw = BalanceLogic.netWorth(items, accounts, fx, s.getDate());
       Map<String, Object> row = new LinkedHashMap<>();
       row.put("id", s.getId());
       row.put("date", s.getDate());
@@ -112,10 +127,22 @@ public class SnapshotService {
     return Map.of("dates", snapshotMapper.listSnapshotDatesBetween(userId, from, to));
   }
 
-  @Transactional
+  /** 汇率可能需要联网获取，放在写事务之前，避免请求期间持有 SQLite 锁 */
   public Map<String, Object> create(
-      String userId, String createdBy, String date, String note, List<ItemIn> itemsIn, List<EventIn> eventsIn) {
+      String userId,
+      String createdBy,
+      String date,
+      String note,
+      List<ItemIn> itemsIn,
+      List<EventIn> eventsIn,
+      Map<Currency, Double> fxRates) {
     parseDate(date);
+    fxRateService.ensureRatesForSnapshot(date, usedCurrencies(itemsIn), fxRates);
+    return tx.execute(status -> createInTx(userId, createdBy, date, note, itemsIn, eventsIn));
+  }
+
+  private Map<String, Object> createInTx(
+      String userId, String createdBy, String date, String note, List<ItemIn> itemsIn, List<EventIn> eventsIn) {
     if (snapshotMapper.countByUserAndDate(userId, date) > 0) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "该日期已有快照");
     }
@@ -139,14 +166,26 @@ public class SnapshotService {
     return Map.of("snapshot", buildDetailMap(Objects.requireNonNull(loaded), accountsMap(userId)));
   }
 
-  @Transactional
+  /** 同 create：先确保汇率，再开写事务 */
   public Map<String, Object> update(
+      String userId,
+      String snapshotId,
+      String date,
+      String note,
+      List<ItemIn> itemsIn,
+      List<EventIn> eventsIn,
+      Map<Currency, Double> fxRates) {
+    parseDate(date);
+    fxRateService.ensureRatesForSnapshot(date, usedCurrencies(itemsIn), fxRates);
+    return tx.execute(status -> updateInTx(userId, snapshotId, date, note, itemsIn, eventsIn));
+  }
+
+  private Map<String, Object> updateInTx(
       String userId, String snapshotId, String date, String note, List<ItemIn> itemsIn, List<EventIn> eventsIn) {
     Snapshot existing = snapshotMapper.findSnapshotById(snapshotId);
     if (existing == null || !userId.equals(existing.getUserId())) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "快照不存在");
     }
-    parseDate(date);
     if (snapshotMapper.countByUserAndDateExcluding(userId, date, snapshotId) > 0) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "该日期已有快照");
     }
@@ -188,6 +227,7 @@ public class SnapshotService {
       row.setSnapshotId(snapshotId);
       row.setAccountId(in.accountId());
       row.setBalance(stored);
+      row.setCurrency(currencyOf(in));
       snapshotMapper.insertItem(row);
     }
   }
@@ -209,6 +249,21 @@ public class SnapshotService {
       e.setAmount(ev.amount());
       snapshotMapper.insertEvent(e);
     }
+  }
+
+  private static Currency currencyOf(ItemIn in) {
+    return in.currency() == null ? Currency.BASE : in.currency();
+  }
+
+  private static Set<Currency> usedCurrencies(List<ItemIn> itemsIn) {
+    Set<Currency> used = EnumSet.noneOf(Currency.class);
+    if (itemsIn == null) {
+      return used;
+    }
+    for (ItemIn in : itemsIn) {
+      used.add(currencyOf(in));
+    }
+    return used;
   }
 
   private static void validateItemsComplete(List<Account> active, List<ItemIn> itemsIn) {
@@ -236,16 +291,19 @@ public class SnapshotService {
 
   private Map<String, Object> buildDetailMap(Snapshot s, Map<String, Account> accounts) {
     List<SnapshotItem> items = snapshotMapper.listItems(s.getId());
+    FxTable fx = fxRateService.loadTable();
     List<Map<String, Object>> itemViews = new ArrayList<>();
     for (SnapshotItem it : items) {
       Account acc = accounts.get(it.getAccountId());
       Map<String, Object> m = new LinkedHashMap<>();
       m.put("accountId", it.getAccountId());
       m.put("balance", it.getBalance());
+      m.put("currency", it.getCurrency());
       if (acc != null) {
         m.put("accountName", acc.getName());
         m.put("type", acc.getType());
         m.put("owner", acc.getOwner());
+        m.put("baseBalance", BalanceLogic.baseBalance(acc.getType(), it, fx, s.getDate()));
       }
       itemViews.add(m);
     }
@@ -266,7 +324,15 @@ public class SnapshotService {
     snap.put("note", s.getNote());
     snap.put("createdAt", s.getCreatedAt());
     snap.put("createdBy", s.getCreatedBy());
-    snap.put("netWorth", BalanceLogic.netWorth(items, accounts));
+    snap.put("netWorth", BalanceLogic.netWorth(items, accounts, fx, s.getDate()));
+    Map<String, Double> rates = new LinkedHashMap<>();
+    for (Currency c : Currency.foreign()) {
+      Double r = fx.rateOrNull(c, s.getDate());
+      if (r != null) {
+        rates.put(c.name(), r);
+      }
+    }
+    snap.put("fxRates", rates);
     snap.put("items", itemViews);
     snap.put("events", eventViews);
     return snap;

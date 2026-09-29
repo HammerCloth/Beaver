@@ -1,10 +1,14 @@
 import type { SnapshotDetail, SnapshotListItem } from '@/types/models'
+import type { CurrencyCode, ForeignCurrency } from '@/lib/currency'
 import http from './http'
 
 export interface SnapshotItemInput {
   accountId: string
   balance: number
+  currency: CurrencyCode
 }
+
+export type SnapshotFxRatesInput = Partial<Record<ForeignCurrency, number>>
 
 export interface SnapshotEventInput {
   category: string
@@ -32,6 +36,7 @@ export async function createSnapshot(body: {
   note?: string | null
   items: SnapshotItemInput[]
   events: SnapshotEventInput[]
+  fxRates: SnapshotFxRatesInput
 }) {
   const { data } = await http.post<{ snapshot: SnapshotDetail }>('/api/v1/snapshots', body)
   return data.snapshot
@@ -44,6 +49,7 @@ export async function updateSnapshot(
     note?: string | null
     items: SnapshotItemInput[]
     events: SnapshotEventInput[]
+    fxRates: SnapshotFxRatesInput
   },
 ) {
   const { data } = await http.put<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${id}`, body)

@@ -98,7 +98,9 @@ public class McpService {
         "concepts",
         Map.of(
             "snapshot", "A dated asset inventory record.",
-            "snapshot_items", "Balances for each account inside one snapshot.",
+            "snapshot_items",
+                "Balances for each account inside one snapshot. balance is in the item's currency "
+                    + "(CNY, USD or HKD); baseBalance is the CNY equivalent.",
             "events", "Major financial events linked to snapshots; they are not complete transaction records.",
             "account_type", "Current default types include cash, deposit, fund, pension, housing_fund, and credit.",
             "owner", "Account ownership labels are user-configurable."));
@@ -106,7 +108,10 @@ public class McpService {
         "balance_rules",
         Map.of(
             "credit", "Credit accounts are treated as liabilities and count negatively toward net worth.",
-            "other_types", "Other account balances count as stored."));
+            "other_types", "Other account balances count as stored.",
+            "currency",
+                "Net worth and all aggregates are in CNY. Foreign balances are converted with the "
+                    + "exchange rate of the snapshot date (or the closest earlier recorded date), listed in fxRates."));
     out.put(
         "recommended_workflow",
         List.of(
@@ -120,7 +125,7 @@ public class McpService {
             "The system does not store complete transaction ledgers.",
             "Events do not identify the account that paid or received money.",
             "Event date filtering uses the linked snapshot date.",
-            "The schema does not store currency, cost basis, liquidity, or risk level.",
+            "The schema does not store cost basis, liquidity, or risk level.",
             "Cash flow and investment return analysis should be phrased as approximate."));
     return out;
   }

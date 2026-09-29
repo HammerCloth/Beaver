@@ -1,12 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import type { Account } from '@/types/models'
 import * as accountApi from '@/api/account'
 import * as snapshotApi from '@/api/snapshot'
+import * as fxApi from '@/api/fx'
+import { fxSourceText, type FxQuote } from '@/api/fx'
 import { DIM_ACCOUNT_OWNER, DIM_ACCOUNT_TYPE, DIM_EVENT_CATEGORY, useSettingsStore } from '@/stores/settings'
 import { amountTone, formatMoney, formatSignedMoney } from '@/lib/format'
+import {
+  BASE_CURRENCY,
+  CURRENCIES,
+  FOREIGN_CURRENCIES,
+  currencyLabel,
+  currencySymbol,
+  type CurrencyCode,
+  type ForeignCurrency,
+} from '@/lib/currency'
 import { useCategoryColor } from '@/composables/useCategoryColor'
 import PageHeader from '@/components/PageHeader.vue'
 
@@ -22,19 +33,84 @@ const isEdit = computed(() => route.name === 'snapshot-edit')
 const date = ref<string | null>(null)
 const note = ref('')
 const accounts = ref<Account[]>([])
+/** 原币金额 */
 const balances = ref<Record<string, number | null>>({})
+const currencies = ref<Record<string, CurrencyCode>>({})
+/** 1 外币 = x 人民币，按快照日期获取，可手动修改 */
+const fxRates = ref<Record<ForeignCurrency, number | null>>({ USD: null, HKD: null })
+const fxQuotes = ref<Partial<Record<ForeignCurrency, FxQuote>>>({})
+/** 用户手动改过的汇率才提交，其余由后端按日期获取，避免把借用的汇率存成手动记录 */
+const fxEdited = ref<Record<ForeignCurrency, boolean>>({ USD: false, HKD: false })
+const fxLoading = ref(false)
 type Flow = 'in' | 'out'
 const events = ref<
   { category: string; description: string; absAmount: number | null; flow: Flow }[]
 >([])
 const loading = ref(false)
-/** 新建时预填自上一次快照，用于对比变化 */
+/** 新建时预填自上一次快照，用于对比变化；previous 为折合人民币的有效余额 */
 const previous = ref<Record<string, number>>({})
+const previousRaw = ref<Record<string, { balance: number; currency: CurrencyCode }>>({})
 const previousDate = ref<string | null>(null)
 
 /** 与后端 BalanceLogic 一致：负债按负值计入 */
 function effective(type: string, v: number) {
   return type === 'credit' ? -Math.abs(v) : v
+}
+
+function currencyOf(a: Account): CurrencyCode {
+  return currencies.value[a.id] ?? BASE_CURRENCY
+}
+
+function rateOf(c: CurrencyCode) {
+  return c === BASE_CURRENCY ? 1 : (fxRates.value[c as ForeignCurrency] ?? 0)
+}
+
+/** 实时折算：原币余额 × 汇率，负债为负 */
+function baseValue(a: Account) {
+  return effective(a.type, (balances.value[a.id] ?? 0) * rateOf(currencyOf(a)))
+}
+
+/** 当前快照用到的外币 */
+const usedForeign = computed(() =>
+  FOREIGN_CURRENCIES.filter((c) => accounts.value.some((a) => currencyOf(a) === c)),
+)
+const currencyOptions = CURRENCIES.map((c) => ({ label: c.code, value: c.code }))
+
+function fxHint(c: ForeignCurrency) {
+  const q = fxQuotes.value[c]
+  if (fxEdited.value[c]) return '已手动修改'
+  if (fxLoading.value) return '获取中…'
+  if (!q || q.rate == null) return '所有汇率源均不可用，请手动填写'
+  if (q.fallback) return `汇率源暂不可用，沿用 ${q.rateDate} 的汇率`
+  return `来源：${fxSourceText(q)}`
+}
+
+let fxRequestSeq = 0
+
+/** 按快照日期获取汇率；日期快速切换时丢弃过期的响应 */
+async function loadFxRates() {
+  const requested = date.value
+  if (!requested) return
+  const seq = ++fxRequestSeq
+  fxLoading.value = true
+  try {
+    const rates = await fxApi.getFxRates(requested)
+    if (seq !== fxRequestSeq) return
+    fxQuotes.value = rates
+    for (const c of FOREIGN_CURRENCIES) {
+      fxRates.value[c] = rates[c]?.rate ?? null
+      fxEdited.value[c] = false
+    }
+  } catch {
+    if (seq === fxRequestSeq) {
+      fxQuotes.value = {}
+      message.warning('汇率获取失败，请手动填写')
+    }
+  } finally {
+    if (seq === fxRequestSeq) {
+      fxLoading.value = false
+    }
+  }
 }
 
 const groups = computed(() => {
@@ -50,15 +126,13 @@ const groups = computed(() => {
       label: settings.label(DIM_ACCOUNT_TYPE, type),
       color: categoryColor(DIM_ACCOUNT_TYPE, type),
       accounts: list,
-      subtotal: list.reduce((sum, a) => sum + effective(type, balances.value[a.id] ?? 0), 0),
+      subtotal: list.reduce((sum, a) => sum + baseValue(a), 0),
     }))
 })
 
 const filledCount = computed(() => accounts.value.filter((a) => balances.value[a.id] != null).length)
-const netWorth = computed(() => accounts.value.reduce((sum, a) => sum + effective(a.type, balances.value[a.id] ?? 0), 0))
-const previousNetWorth = computed(() =>
-  accounts.value.reduce((sum, a) => sum + effective(a.type, previous.value[a.id] ?? 0), 0),
-)
+const netWorth = computed(() => accounts.value.reduce((sum, a) => sum + baseValue(a), 0))
+const previousNetWorth = computed(() => accounts.value.reduce((sum, a) => sum + (previous.value[a.id] ?? 0), 0))
 const hasPrevious = computed(() => Object.keys(previous.value).length > 0)
 const eventNet = computed(() => events.value.reduce((sum, e) => sum + signedAmount(e), 0))
 
@@ -68,7 +142,8 @@ function accountDelta(a: Account) {
   if (now == null || before == null) {
     return null
   }
-  return effective(a.type, now) - effective(a.type, before)
+  // 按展示精度取整，避免汇率微小波动显示成 +¥0
+  return Math.round(baseValue(a) - before)
 }
 
 const categorySelectOptions = computed(() => settings.selectOptions(DIM_EVENT_CATEGORY))
@@ -84,6 +159,7 @@ async function load() {
   accounts.value = accs
   for (const a of accs) {
     balances.value[a.id] = null
+    currencies.value[a.id] = BASE_CURRENCY
   }
 
   if (isEdit.value && idParam.value) {
@@ -92,6 +168,7 @@ async function load() {
     note.value = s.note ?? ''
     for (const row of s.items) {
       balances.value[row.accountId] = row.balance
+      currencies.value[row.accountId] = row.currency ?? BASE_CURRENCY
     }
     events.value =
       s.events?.map((e) => ({
@@ -105,8 +182,11 @@ async function load() {
     if (latest?.items?.length) {
       previousDate.value = latest.date
       for (const row of latest.items) {
+        const currency = row.currency ?? BASE_CURRENCY
         balances.value[row.accountId] = row.balance
-        previous.value[row.accountId] = row.balance
+        currencies.value[row.accountId] = currency
+        previousRaw.value[row.accountId] = { balance: row.balance, currency }
+        previous.value[row.accountId] = row.baseBalance ?? effective(row.type ?? '', row.balance)
       }
     }
     const q = route.query.date
@@ -148,10 +228,22 @@ async function submit() {
   const items = accounts.value.map((a) => ({
     accountId: a.id,
     balance: balances.value[a.id],
+    currency: currencyOf(a),
   }))
   if (items.some((i) => i.balance === null || Number.isNaN(i.balance as number))) {
     message.error('请为每个账户填写余额')
     return
+  }
+  const rates: snapshotApi.SnapshotFxRatesInput = {}
+  for (const c of usedForeign.value) {
+    const r = fxRates.value[c]
+    if (r == null || !(r > 0)) {
+      message.error(`请填写${currencyLabel(c)}汇率`)
+      return
+    }
+    if (fxEdited.value[c]) {
+      rates[c] = r
+    }
   }
   const incomplete = events.value.some((e) => {
     const hasText = Boolean(e.description?.trim())
@@ -175,8 +267,9 @@ async function submit() {
       await snapshotApi.updateSnapshot(idParam.value, {
         date: date.value,
         note: note.value || null,
-        items: items.map((i) => ({ accountId: i.accountId, balance: i.balance as number })),
+        items: items.map((i) => ({ accountId: i.accountId, balance: i.balance as number, currency: i.currency })),
         events: evs,
+        fxRates: rates,
       })
       message.success('已保存')
       await router.replace(`/snapshots/${idParam.value}`)
@@ -184,8 +277,9 @@ async function submit() {
       const s = await snapshotApi.createSnapshot({
         date: date.value,
         note: note.value || null,
-        items: items.map((i) => ({ accountId: i.accountId, balance: i.balance as number })),
+        items: items.map((i) => ({ accountId: i.accountId, balance: i.balance as number, currency: i.currency })),
         events: evs,
+        fxRates: rates,
       })
       message.success('已创建')
       await router.replace(`/snapshots/${s.id}`)
@@ -206,8 +300,16 @@ function goBack() {
   }
 }
 
-onMounted(() => {
-  load().catch(() => message.error('加载失败'))
+onMounted(async () => {
+  try {
+    await load()
+  } catch {
+    message.error('加载失败')
+    return
+  }
+  // 新建和编辑都按快照日期取汇率：该日已记录的汇率直接返回，没有则获取当天汇率
+  await loadFxRates()
+  watch(date, loadFxRates)
 })
 </script>
 
@@ -232,6 +334,23 @@ onMounted(() => {
           <n-input v-model:value="note" placeholder="可选，例如：年终奖到账、基金调仓" />
         </n-form-item>
       </div>
+      <div v-if="usedForeign.length" class="fx-rates">
+        <div v-for="c in usedForeign" :key="c" class="fx-rate">
+          <span class="fx-rate__label">1 {{ c }} =</span>
+          <n-input-number
+            v-model:value="fxRates[c]"
+            class="fx-rate__input"
+            @update:value="fxEdited[c] = true"
+            :show-button="false"
+            :min="0"
+            :status="fxRates[c] == null ? 'warning' : undefined"
+            placeholder="汇率"
+          >
+            <template #suffix>CNY</template>
+          </n-input-number>
+          <span class="cell-muted">{{ fxHint(c) }}</span>
+        </div>
+      </div>
     </n-card>
 
     <n-card class="surface-panel surface-panel--flush">
@@ -249,20 +368,32 @@ onMounted(() => {
             <span class="cell-muted">{{ settings.label(DIM_ACCOUNT_OWNER, a.owner) }}</span>
           </div>
           <span class="balance-row__prev">
-            <template v-if="previous[a.id] != null">上次 {{ formatMoney(previous[a.id]) }}</template>
+            <template v-if="previousRaw[a.id]">上次 {{ formatMoney(previousRaw[a.id].balance, previousRaw[a.id].currency) }}</template>
           </span>
           <span class="balance-row__delta amount" :class="accountDelta(a) ? `amount--${amountTone(accountDelta(a) ?? 0)}` : 'amount--muted'">
             <template v-if="accountDelta(a) !== null">{{ accountDelta(a) ? formatSignedMoney(accountDelta(a) ?? 0) : '无变化' }}</template>
           </span>
-          <n-input-number
-            v-model:value="balances[a.id]"
-            class="balance-row__input"
-            :show-button="false"
-            :status="balances[a.id] == null ? 'warning' : undefined"
-            placeholder="0.00"
-          >
-            <template #prefix>¥</template>
-          </n-input-number>
+          <div class="balance-row__input">
+            <n-input-group>
+              <n-select
+                v-model:value="currencies[a.id]"
+                class="balance-row__currency"
+                :options="currencyOptions"
+                :consistent-menu-width="false"
+              />
+              <n-input-number
+                v-model:value="balances[a.id]"
+                :show-button="false"
+                :status="balances[a.id] == null ? 'warning' : undefined"
+                placeholder="0.00"
+              >
+                <template #prefix>{{ currencySymbol(currencies[a.id] ?? 'CNY') }}</template>
+              </n-input-number>
+            </n-input-group>
+            <span v-if="currencies[a.id] && currencies[a.id] !== 'CNY'" class="balance-row__base">
+              ≈ {{ formatMoney(baseValue(a)) }}
+            </span>
+          </div>
         </div>
       </div>
     </n-card>
@@ -321,7 +452,7 @@ onMounted(() => {
 
 .balance-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px 110px 180px;
+  grid-template-columns: minmax(0, 1fr) 140px 110px 240px;
   align-items: center;
   gap: 16px;
   padding: 10px 20px;
@@ -340,8 +471,53 @@ onMounted(() => {
   text-align: right;
 }
 
+.balance-row__input {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .balance-row__input :deep(input) {
   text-align: right;
+}
+
+.balance-row__currency {
+  width: 84px;
+  flex: none;
+}
+
+.balance-row__base {
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-rates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.fx-rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+}
+
+.fx-rate__label {
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-rate__input {
+  width: 150px;
 }
 
 .event-list {
@@ -359,7 +535,7 @@ onMounted(() => {
 
 @media (max-width: 820px) {
   .balance-row {
-    grid-template-columns: minmax(0, 1fr) 150px;
+    grid-template-columns: minmax(0, 1fr) 200px;
     padding: 10px 16px;
   }
 
@@ -387,6 +563,21 @@ onMounted(() => {
   .event-row > :nth-child(2) {
     grid-column: 1 / -1;
     grid-row: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .balance-row {
+    grid-template-columns: minmax(0, 1fr) 176px;
+    gap: 4px 12px;
+  }
+
+  .balance-row__currency {
+    width: 72px;
+  }
+
+  .fx-rate__input {
+    width: 100%;
   }
 }
 </style>

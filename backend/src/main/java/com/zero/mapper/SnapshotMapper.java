@@ -51,14 +51,16 @@ public interface SnapshotMapper {
       @Param("userId") String userId, @Param("date") String date, @Param("excludeId") String excludeId);
 
   @Insert(
-      "INSERT INTO snapshot_items(id, snapshot_id, account_id, balance) VALUES(#{id}, #{snapshotId}, #{accountId}, #{balance})")
+      "INSERT INTO snapshot_items(id, snapshot_id, account_id, balance, currency) "
+          + "VALUES(#{id}, #{snapshotId}, #{accountId}, #{balance}, #{currency})")
   int insertItem(SnapshotItem item);
 
   @Delete("DELETE FROM snapshot_items WHERE snapshot_id = #{snapshotId}")
   int deleteItemsForSnapshot(String snapshotId);
 
   @Select(
-      "SELECT id, snapshot_id as snapshotId, account_id as accountId, balance FROM snapshot_items WHERE snapshot_id = #{snapshotId}")
+      "SELECT id, snapshot_id as snapshotId, account_id as accountId, balance, currency "
+          + "FROM snapshot_items WHERE snapshot_id = #{snapshotId}")
   List<SnapshotItem> listItems(String snapshotId);
 
   @Insert(

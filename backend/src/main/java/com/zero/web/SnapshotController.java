@@ -1,5 +1,6 @@
 package com.zero.web;
 
+import com.zero.domain.Currency;
 import com.zero.service.SnapshotService;
 import com.zero.service.SnapshotService.EventIn;
 import com.zero.service.SnapshotService.ItemIn;
@@ -21,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/snapshots")
 public class SnapshotController {
+
+  /** 常规 id 为 32 位 hex；scripts/seed_demo_data.py 写入的演示数据为 demo- 加 24 位 hex */
+  private static final String ID_PATTERN = "[A-Za-z0-9-]{1,64}";
 
   private final SnapshotService snapshotService;
 
@@ -52,29 +56,31 @@ public class SnapshotController {
     return snapshotService.listDatesInRange(uid, from, to);
   }
 
-  @GetMapping("/{id:[a-fA-F0-9]{32}}")
+  @GetMapping("/{id:" + ID_PATTERN + "}")
   public Map<String, Object> get(@PathVariable String id) {
     String uid = CurrentUser.require().userId();
     return Map.of("snapshot", snapshotService.getDetail(uid, id));
   }
 
-  public record WriteBody(String date, String note, List<ItemIn> items, List<EventIn> events) {}
+  public record WriteBody(
+      String date, String note, List<ItemIn> items, List<EventIn> events, Map<Currency, Double> fxRates) {}
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public Map<String, Object> create(@RequestBody WriteBody body) {
     var p = CurrentUser.require();
     return snapshotService.create(
-        p.userId(), p.userId(), body.date(), body.note(), body.items(), body.events());
+        p.userId(), p.userId(), body.date(), body.note(), body.items(), body.events(), body.fxRates());
   }
 
-  @PutMapping("/{id:[a-fA-F0-9]{32}}")
+  @PutMapping("/{id:" + ID_PATTERN + "}")
   public Map<String, Object> update(@PathVariable String id, @RequestBody WriteBody body) {
     String uid = CurrentUser.require().userId();
-    return snapshotService.update(uid, id, body.date(), body.note(), body.items(), body.events());
+    return snapshotService.update(
+        uid, id, body.date(), body.note(), body.items(), body.events(), body.fxRates());
   }
 
-  @DeleteMapping("/{id:[a-fA-F0-9]{32}}")
+  @DeleteMapping("/{id:" + ID_PATTERN + "}")
   public Map<String, Boolean> delete(@PathVariable String id) {
     String uid = CurrentUser.require().userId();
     snapshotService.delete(uid, id);

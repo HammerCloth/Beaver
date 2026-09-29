@@ -1,10 +1,12 @@
 package com.zero.service;
 
 import com.zero.domain.Account;
+import com.zero.domain.FxRate;
 import com.zero.domain.Snapshot;
 import com.zero.domain.SnapshotEvent;
 import com.zero.domain.SnapshotItem;
 import com.zero.mapper.AccountMapper;
+import com.zero.mapper.FxRateMapper;
 import com.zero.mapper.SnapshotMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -20,10 +22,12 @@ public class ExportService {
 
   private final SnapshotMapper snapshotMapper;
   private final AccountMapper accountMapper;
+  private final FxRateMapper fxRateMapper;
 
-  public ExportService(SnapshotMapper snapshotMapper, AccountMapper accountMapper) {
+  public ExportService(SnapshotMapper snapshotMapper, AccountMapper accountMapper, FxRateMapper fxRateMapper) {
     this.snapshotMapper = snapshotMapper;
     this.accountMapper = accountMapper;
+    this.fxRateMapper = fxRateMapper;
   }
 
   public byte[] exportCsv(String userId) {
@@ -32,7 +36,7 @@ public class ExportService {
             .collect(Collectors.toMap(Account::getId, Function.identity()));
     List<Snapshot> snaps = snapshotMapper.listSnapshotsByUser(userId);
     StringBuilder sb = new StringBuilder();
-    sb.append("snapshot_id,date,note,created_at,account_id,account_name,type,owner,balance\n");
+    sb.append("snapshot_id,date,note,created_at,account_id,account_name,type,owner,currency,balance\n");
     for (Snapshot s : snaps) {
       List<SnapshotItem> items = snapshotMapper.listItems(s.getId());
       for (SnapshotItem it : items) {
@@ -52,6 +56,8 @@ public class ExportService {
             .append(csv(a != null ? a.getType() : ""))
             .append(',')
             .append(csv(a != null ? a.getOwner() : ""))
+            .append(',')
+            .append(it.getCurrency())
             .append(',')
             .append(it.getBalance())
             .append('\n');
@@ -73,6 +79,17 @@ public class ExportService {
             .append(csv(e.getCreatedAt()))
             .append('\n');
       }
+    }
+    sb.append("\nfx_currency,rate_date,rate_to_cny,source\n");
+    for (FxRate r : fxRateMapper.listAll()) {
+      sb.append(r.getCurrency())
+          .append(',')
+          .append(csv(r.getRateDate()))
+          .append(',')
+          .append(r.getRate())
+          .append(',')
+          .append(r.getSource())
+          .append('\n');
     }
     byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);
     byte[] out = new byte[UTF8_BOM.length + body.length];

@@ -22,10 +22,13 @@ public class DashboardService {
 
   private final SnapshotMapper snapshotMapper;
   private final AccountMapper accountMapper;
+  private final FxRateService fxRateService;
 
-  public DashboardService(SnapshotMapper snapshotMapper, AccountMapper accountMapper) {
+  public DashboardService(
+      SnapshotMapper snapshotMapper, AccountMapper accountMapper, FxRateService fxRateService) {
     this.snapshotMapper = snapshotMapper;
     this.accountMapper = accountMapper;
+    this.fxRateService = fxRateService;
   }
 
   public Map<String, Object> summary(String userId) {
@@ -38,26 +41,28 @@ public class DashboardService {
           "annualizedReturn", 0.0);
     }
     Map<String, Account> accounts = accountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     Snapshot latest = desc.get(0);
-    double nw = nwForSnapshot(latest.getId(), accounts);
+    double nw = nwForSnapshot(latest, accounts, fx);
 
     LocalDate latestDate = LocalDate.parse(latest.getDate());
     LocalDate monthAgo = latestDate.minusMonths(1);
-    double nwMonthAgo = nwLatestOnOrBefore(userId, desc, monthAgo, accounts);
+    double nwMonthAgo = nwLatestOnOrBefore(desc, monthAgo, accounts, fx);
 
     LocalDate yearAgo = latestDate.minusYears(1);
-    double nwYearAgo = nwLatestOnOrBefore(userId, desc, yearAgo, accounts);
+    double nwYearAgo = nwLatestOnOrBefore(desc, yearAgo, accounts, fx);
 
     return Map.of(
         "netWorth", nw,
         "monthlyChange", nw - nwMonthAgo,
         "annualChange", nw - nwYearAgo,
-        "annualizedReturn", annualizedReturn(desc, accounts));
+        "annualizedReturn", annualizedReturn(desc, accounts, fx));
   }
 
   public Map<String, Object> trend(String userId, String range) {
     List<Snapshot> desc = snapshotMapper.listSnapshotsByUser(userId);
     Map<String, Account> accounts = accountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     LocalDate from = rangeFromOrNull(range == null ? "all" : range);
     List<Map<String, Object>> points = new ArrayList<>();
     for (int i = desc.size() - 1; i >= 0; i--) {
@@ -66,7 +71,7 @@ public class DashboardService {
       if (from != null && d.isBefore(from)) {
         continue;
       }
-      double nw = nwForSnapshot(s.getId(), accounts);
+      double nw = nwForSnapshot(s, accounts, fx);
       Map<String, Object> pt = new LinkedHashMap<>();
       pt.put("date", s.getDate());
       pt.put("netWorth", nw);
@@ -81,6 +86,7 @@ public class DashboardService {
       return Map.of("points", List.of());
     }
     Map<String, Account> accounts = accountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     LocalDate from = rangeFromOrNull(range == null ? "all" : range);
     List<Map<String, Object>> points = new ArrayList<>();
     for (int i = desc.size() - 1; i >= 0; i--) {
@@ -89,7 +95,7 @@ public class DashboardService {
       if (from != null && d.isBefore(from)) {
         continue;
       }
-      Map<String, Double> byType = compositionByTypeForSnapshot(s.getId(), accounts);
+      Map<String, Double> byType = compositionByTypeForSnapshot(s, accounts, fx);
       Map<String, Object> pt = new LinkedHashMap<>();
       pt.put("date", s.getDate());
       pt.put("byType", byType);
@@ -104,7 +110,7 @@ public class DashboardService {
     if (desc.isEmpty() || active.isEmpty()) {
       return Map.of("accounts", List.of());
     }
-    Map<String, Account> accounts = accountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     LocalDate from = rangeFromOrNull(range == null ? "all" : range);
     List<Snapshot> inRange = new ArrayList<>();
     for (int i = desc.size() - 1; i >= 0; i--) {
@@ -117,17 +123,17 @@ public class DashboardService {
     }
     List<Map<String, Object>> accountRows = new ArrayList<>();
     for (Account acc : active) {
-      Double lastRaw = null;
+      SnapshotItem last = null;
       List<Map<String, Object>> pts = new ArrayList<>();
       for (Snapshot s : inRange) {
-        Double raw = findBalanceForAccount(s.getId(), acc.getId());
-        if (raw != null) {
-          lastRaw = raw;
+        SnapshotItem item = findItemForAccount(s.getId(), acc.getId());
+        if (item != null) {
+          last = item;
         }
-        if (lastRaw == null) {
+        if (last == null) {
           continue;
         }
-        double eff = BalanceLogic.effectiveBalance(acc.getType(), lastRaw);
+        double eff = BalanceLogic.baseBalance(acc.getType(), last, fx, s.getDate());
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("date", s.getDate());
         p.put("balance", eff);
@@ -153,6 +159,7 @@ public class DashboardService {
       return empty;
     }
     Map<String, Account> accounts = accountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     Snapshot latest = desc.get(0);
     List<SnapshotItem> items = snapshotMapper.listItems(latest.getId());
     Map<String, Double> byType = new HashMap<>();
@@ -163,7 +170,7 @@ public class DashboardService {
       if (a == null) {
         continue;
       }
-      double eff = BalanceLogic.effectiveBalance(a.getType(), it.getBalance());
+      double eff = BalanceLogic.baseBalance(a.getType(), it, fx, latest.getDate());
       byType.merge(a.getType(), eff, Double::sum);
       byOwner.merge(a.getOwner(), eff, Double::sum);
       byTypeAccounts
@@ -187,10 +194,11 @@ public class DashboardService {
       return empty;
     }
     Map<String, Account> accounts = accountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     Snapshot latest = desc.get(0);
     Snapshot previous = desc.get(1);
-    Map<String, Double> latestByType = compositionByTypeForSnapshot(latest.getId(), accounts);
-    Map<String, Double> previousByType = compositionByTypeForSnapshot(previous.getId(), accounts);
+    Map<String, Double> latestByType = compositionByTypeForSnapshot(latest, accounts, fx);
+    Map<String, Double> previousByType = compositionByTypeForSnapshot(previous, accounts, fx);
     List<String> types = new ArrayList<>();
     for (String type : latestByType.keySet()) {
       if (!types.contains(type)) {
@@ -227,14 +235,15 @@ public class DashboardService {
     int y = year != null ? year : LocalDate.now().getYear();
     List<Snapshot> desc = snapshotMapper.listSnapshotsByUser(userId);
     Map<String, Account> accounts = accountsById(userId);
+    FxTable fx = fxRateService.loadTable();
     List<Map<String, Object>> points = new ArrayList<>();
     double cumulative = 0;
     for (int m = 1; m <= 12; m++) {
       YearMonth ym = YearMonth.of(y, m);
       LocalDate end = ym.atEndOfMonth();
       LocalDate prevEnd = ym.minusMonths(1).atEndOfMonth();
-      double nwEnd = nwLatestOnOrBefore(userId, desc, end, accounts);
-      double nwPrev = nwLatestOnOrBefore(userId, desc, prevEnd, accounts);
+      double nwEnd = nwLatestOnOrBefore(desc, end, accounts, fx);
+      double nwPrev = nwLatestOnOrBefore(desc, prevEnd, accounts, fx);
       double change = nwEnd - nwPrev;
       cumulative += change;
       Map<String, Object> row = new LinkedHashMap<>();
@@ -255,30 +264,31 @@ public class DashboardService {
     };
   }
 
-  private Map<String, Double> compositionByTypeForSnapshot(String snapshotId, Map<String, Account> accounts) {
-    List<SnapshotItem> items = snapshotMapper.listItems(snapshotId);
+  private Map<String, Double> compositionByTypeForSnapshot(
+      Snapshot snapshot, Map<String, Account> accounts, FxTable fx) {
+    List<SnapshotItem> items = snapshotMapper.listItems(snapshot.getId());
     Map<String, Double> byType = new HashMap<>();
     for (SnapshotItem it : items) {
       Account a = accounts.get(it.getAccountId());
       if (a == null) {
         continue;
       }
-      double eff = BalanceLogic.effectiveBalance(a.getType(), it.getBalance());
+      double eff = BalanceLogic.baseBalance(a.getType(), it, fx, snapshot.getDate());
       byType.merge(a.getType(), eff, Double::sum);
     }
     return byType;
   }
 
-  private Double findBalanceForAccount(String snapshotId, String accountId) {
+  private SnapshotItem findItemForAccount(String snapshotId, String accountId) {
     for (SnapshotItem it : snapshotMapper.listItems(snapshotId)) {
       if (accountId.equals(it.getAccountId())) {
-        return it.getBalance();
+        return it;
       }
     }
     return null;
   }
 
-  private double annualizedReturn(List<Snapshot> desc, Map<String, Account> accounts) {
+  private double annualizedReturn(List<Snapshot> desc, Map<String, Account> accounts, FxTable fx) {
     if (desc.size() < 2) {
       return 0.0;
     }
@@ -290,25 +300,25 @@ public class DashboardService {
     if (days <= 0) {
       return 0.0;
     }
-    double nwL = nwForSnapshot(latest.getId(), accounts);
-    double nwE = nwForSnapshot(earliest.getId(), accounts);
+    double nwL = nwForSnapshot(latest, accounts, fx);
+    double nwE = nwForSnapshot(earliest, accounts, fx);
     if (nwE <= 0) {
       return 0.0;
     }
     return Math.pow(nwL / nwE, 365.0 / days) - 1.0;
   }
 
-  private double nwForSnapshot(String snapshotId, Map<String, Account> accounts) {
-    List<SnapshotItem> items = snapshotMapper.listItems(snapshotId);
-    return BalanceLogic.netWorth(items, accounts);
+  private double nwForSnapshot(Snapshot snapshot, Map<String, Account> accounts, FxTable fx) {
+    List<SnapshotItem> items = snapshotMapper.listItems(snapshot.getId());
+    return BalanceLogic.netWorth(items, accounts, fx, snapshot.getDate());
   }
 
   private double nwLatestOnOrBefore(
-      String userId, List<Snapshot> desc, LocalDate target, Map<String, Account> accounts) {
+      List<Snapshot> desc, LocalDate target, Map<String, Account> accounts, FxTable fx) {
     for (Snapshot s : desc) {
       LocalDate d = LocalDate.parse(s.getDate());
       if (!d.isAfter(target)) {
-        return nwForSnapshot(s.getId(), accounts);
+        return nwForSnapshot(s, accounts, fx);
       }
     }
     return 0.0;

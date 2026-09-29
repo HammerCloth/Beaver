@@ -1,7 +1,9 @@
-export function formatMoney(n: number) {
+import type { CurrencyCode } from './currency'
+
+export function formatMoney(n: number, currency: CurrencyCode = 'CNY') {
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
-    currency: 'CNY',
+    currency,
     maximumFractionDigits: 0,
   }).format(n)
 }

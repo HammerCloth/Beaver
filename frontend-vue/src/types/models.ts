@@ -1,5 +1,7 @@
 /** 与后端 JSON（snake_case）对齐 */
 
+import type { CurrencyCode, ForeignCurrency } from '@/lib/currency'
+
 export interface User {
   id: string
   username: string
@@ -34,11 +36,17 @@ export interface SnapshotDetail {
   createdBy: string
   items: Array<{
     accountId: string
+    /** 原币金额 */
     balance: number
+    currency: CurrencyCode
+    /** 按快照日期汇率折合的人民币有效余额（负债为负） */
+    baseBalance?: number
     accountName?: string
     type?: string
     owner?: string
   }>
+  /** 快照日期对应的外币汇率（1 外币 = x 人民币） */
+  fxRates: Partial<Record<ForeignCurrency, number>>
   events: Array<{
     id: string
     category: string

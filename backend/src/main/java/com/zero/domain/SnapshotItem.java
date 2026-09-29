@@ -11,7 +11,10 @@ public class SnapshotItem {
   @JsonProperty("account_id")
   private String accountId;
 
+  /** 原币金额 */
   private double balance;
+
+  private Currency currency = Currency.BASE;
 
   public String getId() {
     return id;
@@ -43,5 +46,13 @@ public class SnapshotItem {
 
   public void setBalance(double balance) {
     this.balance = balance;
+  }
+
+  public Currency getCurrency() {
+    return currency;
+  }
+
+  public void setCurrency(Currency currency) {
+    this.currency = currency;
   }
 }
