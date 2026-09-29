@@ -1,369 +1,165 @@
+<div align="center">
+
+<img src="frontend-vue/public/icon-192.png" width="88" alt="Beaver" />
+
 # Beaver
 
-家庭资产管理应用，采用：
+**用「快照」管理家庭资产的自托管看板，并通过 MCP 让 AI 帮你分析财务。**
 
-- `backend/`：Spring Boot 3 + SQLite + Flyway
-- `frontend-vue/`：Vue 3 + Vite
-- `docker-compose.yml`：`backend` + `caddy`
-- MCP：后端内置远程 MCP HTTP endpoint，并通过 OAuth 授权码 + PKCE 让 AI Agent 登录授权
+中文 · [English](README.en.md)
 
-当前线上部署方式适合阿里云服务器：`git pull` 更新代码，再执行前端构建或后端容器更新命令。
+</div>
 
-## 目录结构
+![总览](docs/images/zh/desktop-dashboard.png)
 
-- `backend/`：后端源码、Dockerfile、Flyway 迁移
-- `frontend-vue/`：Vue 前端源码与构建产物 `dist/`
-- `Caddyfile`：静态站点与 `/api`、`/mcp`、`/oauth`、OAuth discovery 反代
-- `docker-compose.yml`：生产容器编排
-- `scripts/deploy.sh`：一键构建前端并更新容器
-- `docs/DEPLOYMENT.md`：更完整的部署说明
+Beaver 不做逐笔记账，而是定期（比如每月月底）给所有账户拍一张「资产快照」，只记每个账户当天的余额，再加上这段时间的几笔大事。几分钟就能记完，却足以看清净资产走势、资产结构和钱花在了哪里。
 
-## 线上部署前提
+## 功能
 
-服务器已具备以下条件：
+- **资产快照**：以日历或列表浏览历次快照；新建时自动预填上一次的余额，只改有变化的账户。
+- **总览看板**：净资产趋势、资产构成（按类型或归属）、资产流向图、各类型堆叠走势、类型内各账户占比，以及与上次快照相比的变化。
+- **多币种**：账户可用人民币、美元、港币记账，按快照日期的汇率折算成人民币；汇率自动从多个公开数据源获取并互为备份，也可以手动填写。
+- **大事记**：记录装修、旅行、年终奖等大额收支，按年度、分类统计。
+- **礼金簿与借款**：记录人情往来、别人向你借的钱和分批还款，独立于资产统计。
+- **AI 客户端（MCP）**：内置远程 MCP 服务，Claude Code、Codex 等 AI Agent 通过 OAuth 授权后读取你的资产数据；可在网页上查看和撤销授权。
+- **多用户**：管理员创建成员账号；账户类型、归属、大事记分类都可以自定义。
+- **中英文界面**：跟随浏览器语言，也可以手动切换。
+- **手机友好**：手机上表格自动变成卡片；适配 iOS「添加到主屏幕」，可以像 App 一样使用。
+- **数据导出与备份**：提供 CSV 导出接口（`GET /api/v1/export/csv`），部署前自动备份数据库。
 
-- 已安装 Docker 与 Docker Compose
-- 项目目录已 `git clone`
-- 根目录存在 `.env`
-- 数据库使用 Docker 卷 `zero_data`，容器内路径为 `/data/zero.db`
+<table>
+  <tr>
+    <td><img src="docs/images/zh/mobile-dashboard.png" alt="手机端总览" /></td>
+    <td><img src="docs/images/zh/mobile-snapshot-form.png" alt="手机端录入快照" /></td>
+    <td><img src="docs/images/zh/mobile-calendar.png" alt="手机端快照日历" /></td>
+  </tr>
+</table>
 
-后端默认不会把数据库放在仓库里，而是放在 Docker 卷中；只要你不执行 `docker compose down -v` 或手工删除卷，现有数据库文件会保留。
+## 技术栈
 
-## 本地开发
+| 部分 | 技术 |
+|---|---|
+| 后端 `backend/` | Spring Boot 3、MyBatis、SQLite、Flyway（启动时自动迁移） |
+| 前端 `frontend-vue/` | Vue 3、Vite、TypeScript、Naive UI、Pinia、ECharts、vue-i18n |
+| 部署 | Docker Compose（`backend` + `caddy`），Caddy 负责静态文件、反向代理和 HTTPS |
+| CI/CD | GitHub Actions：后端测试、前端类型检查与构建，通过后 SSH 到服务器部署 |
 
-后端：
+## 快速开始（本地开发）
+
+需要 Java 21+、Node.js 20.19+（或 22.12+）。
 
 ```bash
+# 1. 启动后端（端口 8080，数据库在 backend/data/zero.db）
 cd backend
-export FRONTEND_ORIGIN=http://localhost:5173
 ./mvnw spring-boot:run
-```
 
-前端：
-
-```bash
+# 2. 另开一个终端，启动前端（端口 5173，/api 会代理到 8080）
 cd frontend-vue
-npm install
+npm ci
 npm run dev
 ```
 
-构建前端：
+打开 http://localhost:5173 ，第一次访问会进入初始化页面，创建管理员账号。
+
+### 演示数据
+
+`scripts/seed_demo_data.py` 可以为指定用户生成一整套演示数据：约两年的月度快照、带美元和港币的账户、大事记、礼金和借款。
 
 ```bash
-cd frontend-vue
-npm run build
+# 清空该用户在本地库里的数据并重建演示数据（会先自动备份数据库）
+python3 scripts/seed_demo_data.py --reset --user <用户名>
+
+# 英文版演示数据
+python3 scripts/seed_demo_data.py --reset --user <用户名> --locale en
+
+# 只删除脚本写入的演示数据
+python3 scripts/seed_demo_data.py --clean --user <用户名>
 ```
 
-## 礼金簿
+`--reset` 默认只允许作用于 `backend/data/` 下的数据库，避免误删线上数据。
 
-网页端的“礼金”页面用于记录自己实际承担的礼金支出，不与资产快照或大事记混用，因此不会重复影响账户余额或净资产统计。
-
-- 先维护可枚举的礼金对象；每条记录通过对象 ID 关联历史，而不是依赖手工输入姓名。
-- 每笔记录包含对象、关系、场合、日期、实际承担金额、支付方式与备注。
-- 支持按年度查看支出、笔数、涉及对象和按场合统计；可查看某一对象的完整往来历史。
-- 已有关联记录的对象采用“停用”而非删除，确保历史记录不丢失。
-
-该功能由 Flyway 迁移 `V4__gift_records.sql` 创建以下表：
-
-```text
-gift_recipients
-gift_records
-```
-
-线上发布包含此功能时，后端启动会自动执行 V4 迁移；发布前仍建议备份数据库。
-
-## 借款
-
-网页端的“借款”页面用于记录谁向我们借了钱，以及对方分批次还款的明细，不与资产快照或大事记混用，因此不会重复影响账户余额或净资产统计。
-
-- 每条借款单独存储借款人、关系、本金、借款日、约定还日和备注。
-- 每条借款可登记多笔对方还款记录（金额、还款日、备注），剩余本金 = 借出本金 − 已还合计。
-- 还款金额不能超过剩余本金；全部还清后状态为“已还清”。
-- 删除借款会同时删除其还款记录。
-
-该功能由 Flyway 迁移 `V5__loans.sql` 创建以下表，并由 `V6__loan_borrower.sql` 将出借人字段更名为借款人：
-
-```text
-loans
-loan_repayments
-```
-
-线上发布包含此功能时，后端启动会自动执行 V5、V6 迁移；发布前仍建议备份数据库。
-
-## MCP 与 AI 客户端授权
-
-后端提供远程 MCP endpoint：
-
-```text
-POST /mcp
-```
-
-MCP 访问使用标准 OAuth 授权码 + PKCE 流程。AI Agent 第一次连接时会通过 discovery 找到授权入口，打开浏览器登录 Beaver 已有账号，登录成功后 Agent 使用 authorization code 换取 access token 和 refresh token。MCP 不开放新用户注册；没有现有账号会授权失败。
-
-相关端点：
-
-```text
-GET  /.well-known/oauth-protected-resource
-GET  /.well-known/oauth-authorization-server
-POST /oauth/register
-GET  /oauth/authorize
-POST /oauth/authorize
-POST /oauth/token
-POST /oauth/revoke
-POST /mcp
-```
-
-MCP 当前提供 4 个 tool：
-
-```text
-get_analysis_guide
-list_snapshots
-get_asset_snapshot
-get_major_financial_events
-```
-
-说明：
-
-- `get_analysis_guide` 告诉调用方 AI 当前系统是基于资产快照的数据模型，以及数据限制。
-- `list_snapshots` 列出当前用户已有快照。
-- `get_asset_snapshot` 获取最新、指定 ID 或指定日期的资产快照。
-- `get_major_financial_events` 按关联快照日期查询大事记；不按 `events.created_at` 查询。
-- AI 客户端拿到的是专用 `mcp_access` token，只能访问 `/mcp`，不能访问普通 `/api/**`。
-
-网页端新增“AI 客户端”页面，用于查看和撤销已授权的 AI Agent。后端管理 API：
-
-```text
-GET    /api/v1/oauth/authorizations
-DELETE /api/v1/oauth/authorizations/{id}
-DELETE /api/v1/oauth/authorizations
-```
-
-MCP 授权功能对应 Flyway 迁移 `V3__oauth_mcp.sql`，会创建：
-
-```text
-oauth_clients
-oauth_authorization_codes
-oauth_refresh_tokens
-```
-
-线上发布前建议先备份数据库。
-
-### 安装到 AI 客户端
-
-下面示例假设线上域名是：
-
-```text
-https://app.example.com
-```
-
-实际使用时替换为你的 `CADDY_SITE` 域名。远程 MCP URL 固定为：
-
-```text
-https://app.example.com/mcp
-```
-
-#### Codex
-
-Codex CLI 和 IDE extension 共享 `config.toml` 中的 MCP 配置。可以编辑用户级配置：
+### 测试
 
 ```bash
-mkdir -p ~/.codex
-nano ~/.codex/config.toml
+cd backend && ./mvnw test          # 后端单元测试（请用 JDK 21，与 CI 一致）
+cd frontend-vue && npm run build   # 前端类型检查 + 构建
 ```
 
-加入：
+## 部署
 
-```toml
-[mcp_servers.beaver]
-url = "https://app.example.com/mcp"
-```
+生产环境用 Docker Compose 运行，数据库放在 Docker 卷 `zero_data` 中（容器内 `/data/zero.db`）。
 
-然后执行 OAuth 登录：
+1. 在服务器上克隆仓库，在根目录创建 `.env`：
+
+   ```dotenv
+   FRONTEND_ORIGIN=https://app.example.com
+   CADDY_SITE=app.example.com
+   JWT_ACCESS_SECRET=<随机长字符串>
+   JWT_REFRESH_SECRET=<另一个随机长字符串>
+   ```
+
+2. 执行部署脚本：
+
+   ```bash
+   ./scripts/deploy.sh
+   ```
+
+   脚本会构建前端和镜像，**先备份数据库**到 `backups/zero-<时间>.db`（默认保留最近 10 份），再启动新版本；任一步失败都会重新拉起原来的后端。
+
+3. 可选：配置 GitHub Actions 自动部署。在仓库 Secrets 中设置 `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KEY`、`DEPLOY_PATH`，并把仓库变量 `ENABLE_AUTO_DEPLOY` 设为 `true`，之后每次推送到 `main`、测试通过后会自动部署。
+
+服务器初始化、域名与 HTTPS、防火墙、从备份恢复、常见问题等，见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+
+> ⚠️ 不要执行 `docker compose down -v` 或删除 `zero_data` 卷，那会删掉数据库。
+
+## 接入 AI 客户端（MCP）
+
+Beaver 的 MCP 地址是 `https://<你的域名>/mcp`，使用 OAuth 2.0 授权码 + PKCE 登录，只能用已有账号授权，不开放注册。AI 拿到的令牌只能访问 `/mcp`，不能访问普通接口。
 
 ```bash
+# Claude Code
+claude mcp add --transport http beaver https://app.example.com/mcp
+# 然后在 Claude Code 里输入 /mcp，选择 beaver 完成浏览器登录
+
+# Codex：在 ~/.codex/config.toml 中加入
+#   [mcp_servers.beaver]
+#   url = "https://app.example.com/mcp"
 codex mcp login beaver
 ```
 
-也可以在 Codex TUI 中输入：
+提供的工具：
+
+| 工具 | 作用 |
+|---|---|
+| `get_analysis_guide` | 说明快照式数据模型和数据限制，帮助 AI 正确解读 |
+| `list_snapshots` | 列出当前用户的所有快照 |
+| `get_asset_snapshot` | 获取最新、指定 ID 或指定日期的快照 |
+| `get_major_financial_events` | 按快照日期范围查询大事记 |
+
+授权后可以在网页的「AI 客户端」页查看每个客户端的最后使用时间，并随时撤销。Claude Desktop 的接入方式、授权排查和相关接口见 [docs/MCP.md](docs/MCP.md)。
+
+## 项目结构
 
 ```text
-/mcp
+backend/          Spring Boot 后端：src/main/java/com/zero/、Flyway 迁移、测试
+frontend-vue/     Vue 3 前端（当前使用的版本）
+  src/views/      页面
+  src/i18n/       国际化：locales/<语言>/<命名空间>.ts
+scripts/          deploy.sh（部署与备份）、seed_demo_data.py（演示数据）、诊断脚本
+docs/             部署文档、截图
+openspec/         功能规格说明（specs/）与已归档的变更（changes/archive/）
+Caddyfile         静态站点与 /api、/mcp、/oauth 反向代理
+docker-compose.yml
 ```
 
-查看 MCP server 状态并触发登录。Codex 会打开浏览器，登录 Beaver 已有账号后保存 OAuth token。官方配置说明见 [OpenAI Codex MCP docs](https://developers.openai.com/codex/mcp)。
+## 参与开发
 
-#### Claude Code
+- 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/)，例如 `feat(vue): ...`、`fix(backend): ...`。
+- 数据库结构变更新增 `backend/src/main/resources/db/migration/V<序号>__<说明>.sql`，不要修改已发布的迁移。
+- 新增界面文字时，中英文词条都要加：`frontend-vue/src/i18n/locales/zh-CN/<命名空间>.ts` 和 `en-US/<命名空间>.ts`，代码里用 `import { t } from '@/i18n'`。
+- 修复 bug 时尽量补上回归测试；UI 改动请附截图，并在手机尺寸下检查没有横向滚动。
+- 更多约定见 [AGENTS.md](AGENTS.md)。
 
-添加 HTTP MCP server：
+## 许可证
 
-```bash
-claude mcp add --transport http beaver https://app.example.com/mcp
-```
-
-然后执行 OAuth 登录：
-
-```bash
-claude mcp login beaver
-```
-
-或者进入 Claude Code 交互会话后输入：
-
-```text
-/mcp
-```
-
-在 MCP 面板里选择 `beaver` 并完成浏览器登录。服务器返回 `401` 时会通过 `WWW-Authenticate` 指向 OAuth discovery，Claude Code 会按 OAuth 2.0 流程完成授权并自动刷新 token。远程 SSH 环境下可使用：
-
-```bash
-claude mcp login beaver --no-browser
-```
-
-它会打印授权 URL，浏览器登录后把回调 URL 粘回终端。官方说明见 [Claude Code MCP docs](https://docs.anthropic.com/en/docs/claude-code/mcp)。
-
-#### Claude Desktop
-
-如果你的 Claude Desktop 版本支持远程 HTTP MCP server，可以使用与 Claude Code 相同的远程地址：
-
-```text
-https://app.example.com/mcp
-```
-
-在客户端 MCP 设置里新增 HTTP server，名称建议用 `beaver`。首次调用或在 MCP 管理界面中触发认证时，客户端会打开浏览器走 OAuth 登录。不同 Claude Desktop 版本的 MCP 配置入口可能不同；如果界面没有远程 HTTP MCP 配置项，优先使用 Claude Code 的 `claude mcp add --transport http ...` 方式。
-
-#### 验证
-
-授权成功后，可以让客户端询问：
-
-```text
-请调用 Beaver MCP，列出当前可用快照，并说明这个资产系统的数据模型限制。
-```
-
-如果客户端显示未授权或没有 tools：
-
-- 确认 `https://你的域名/mcp` 能访问到后端，而不是前端页面。
-- 确认 `https://你的域名/.well-known/oauth-protected-resource` 返回 JSON。
-- 确认线上 Caddyfile 已包含 `/mcp`、`/oauth/*` 和 `/.well-known/*` 反代。
-- 在网页端“AI 客户端”页面撤销旧授权后，重新执行客户端登录命令。
-
-## 阿里云线上更新命令
-
-以下命令默认在项目根目录下执行。
-
-### 1. 只更新 Vue 前端
-
-适用场景：只改了 `frontend-vue/`，不需要重发后端。
-
-```bash
-git pull
-cd frontend-vue
-npm ci
-npm run build
-cd ..
-docker compose restart caddy
-```
-
-说明：
-
-- 前端静态文件直接输出到 `frontend-vue/dist/`
-- Caddy 挂载这个目录并对外提供页面
-- 这个流程不会重建后端容器，也不会动当前数据库
-
-### 2. 只更新后端（保留当前数据库）
-
-适用场景：只改了 `backend/`，希望保留当前线上数据。
-
-```bash
-git pull
-docker compose build backend
-docker compose up -d backend
-```
-
-说明：
-
-- 这组命令会更新 `backend` 容器
-- `zero_data` 卷会继续挂载，所以不会删除当前 `zero.db`
-- `caddy` 不需要重建
-
-重要说明：
-
-- “保留当前数据库”指的是：不删库、不重置卷、不替换现有 `zero.db`
-- 但如果新版本后端包含新的 Flyway migration，后端启动时仍会自动执行迁移并修改数据库结构
-- 如果你这次明确要求“连表结构都不要动”，先检查 `backend/src/main/resources/db/migration/` 是否新增了 SQL 文件；有新增时，先备份数据库再发版
-
-### 3. 前后端一起更新
-
-```bash
-git pull
-cd frontend-vue
-npm ci
-npm run build
-cd ..
-docker compose up -d --build
-```
-
-如果你平时就按这个方式发版，也可以直接用：
-
-```bash
-GIT_PULL=1 ./scripts/deploy.sh
-```
-
-### 4. 用 GitHub Actions 自动部署
-
-GitHub 不会直接跑你的阿里云机器，但可以在 push 之后 SSH 登录服务器，执行和上面相同的 `deploy.sh`。
-
-在仓库 **Settings → Secrets and variables → Actions** 里添加这些 **Secrets**：
-
-| Name | 含义 | 示例 |
-|------|------|------|
-| `DEPLOY_HOST` | 服务器公网 IP 或域名 | `47.x.x.x` |
-| `DEPLOY_USER` | SSH 用户名 | `root` |
-| `DEPLOY_SSH_KEY` | 能登录该用户的 **私钥** 全文 | `-----BEGIN OPENSSH PRIVATE KEY----- ...` |
-| `DEPLOY_PATH` | 服务器上仓库根目录（有 `docker-compose.yml` 的那层） | `/opt/Beaver` |
-
-本机生成一把专用密钥（不要用你日常登录电脑的那把）：
-
-```bash
-ssh-keygen -t ed25519 -C "github-deploy" -f ./beaver-deploy -N ""
-```
-
-把 `beaver-deploy.pub` 追加到服务器 `~/.ssh/authorized_keys`，把 `beaver-deploy` 私钥全文贴进 `DEPLOY_SSH_KEY`。本地这两份文件用完可以删。
-
-配好后：
-
-1. 打开 GitHub 仓库 **Actions → CI → Run workflow**，先手动跑一次确认能更新线上。
-2. 若希望以后每次 push `main` 都自动发版，再在 **Settings → Secrets and variables → Actions → Variables** 加 `ENABLE_AUTO_DEPLOY` = `true`。
-
-服务器防火墙 / 安全组需要放行 GitHub Actions 出口 IP 的 22 端口，或至少允许你当前这台机器的 SSH。若 SSH 只白名单了你家 IP，需要把 GitHub 的网段也放行，或改成走固定跳板。
-
-## 建议的发版检查
-
-前端更新后：
-
-- 打开首页与登录页
-- 检查 `/api` 请求是否正常
-- 检查手机端页面是否无横向溢出
-
-后端更新后：
-
-- `docker compose logs -f --tail=100 backend`
-- `curl -sSf http://127.0.0.1:8080/healthz`
-- `curl -sSf http://127.0.0.1/.well-known/oauth-authorization-server`
-- 登录一次，确认读写正常
-- 如本次涉及 MCP，确认 AI 客户端页面可打开，并验证 `/mcp` 能通过 OAuth 授权后访问
-
-## 不要这样做
-
-下面这些操作可能影响当前数据库：
-
-- `docker compose down -v`
-- 手工删除 `zero_data` 卷
-- 手工删除容器内 `/data/zero.db`
-- 在未确认 migration 的情况下直接发布结构变更
-
-## 补充说明
-
-- 后端数据库配置见 `backend/src/main/resources/application.yml`
-- 当前 SQLite 连接为 `jdbc:sqlite:${DATABASE_PATH:./data/zero.db}`
-- 生产环境在 Compose 中通过 `DATABASE_PATH=/data/zero.db` 固定到数据卷
-
-如需更完整的 Ubuntu / 域名 / HTTPS / 防火墙说明，请看 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+[MIT](LICENSE)

@@ -252,15 +252,58 @@ docker logs -f beaver-backend
 
 ## 11. 日常更新（发新版）
 
+推荐直接用部署脚本，它会先备份数据库再更新（见第 12 节）：
+
 ```bash
 ssh user@服务器IP
 cd /opt/你的仓库名/zero
-git pull
-cd frontend-vue && npm ci && npm run build && cd ..
-docker compose up -d --build
+GIT_PULL=1 ./scripts/deploy.sh
 ```
 
-数据在卷 **`zero_data`**（SQLite），不删卷则数据保留。
+配置了 GitHub Actions 自动部署时（README「部署」一节），推送到 `main` 后会自动执行同样的脚本。
+
+数据在卷 **`zero_data`**（SQLite），不删卷则数据保留。新版本若包含 Flyway 迁移，后端启动时会自动修改表结构。
+
+### 只更新 Vue 前端
+
+适用场景：只改了 `frontend-vue/`，不需要重发后端。
+
+```bash
+git pull
+cd frontend-vue
+npm ci
+npm run build
+cd ..
+docker compose restart caddy
+```
+
+说明：
+
+- 前端静态文件直接输出到 `frontend-vue/dist/`
+- Caddy 挂载这个目录并对外提供页面
+- 这个流程不会重建后端容器，也不会动当前数据库
+
+### 只更新后端（保留当前数据库）
+
+适用场景：只改了 `backend/`，希望保留当前线上数据。
+
+```bash
+git pull
+docker compose build backend
+docker compose up -d backend
+```
+
+说明：
+
+- 这组命令会更新 `backend` 容器
+- `zero_data` 卷会继续挂载，所以不会删除当前 `zero.db`
+- `caddy` 不需要重建
+
+重要说明：
+
+- “保留当前数据库”指的是：不删库、不重置卷、不替换现有 `zero.db`
+- 但如果新版本后端包含新的 Flyway migration，后端启动时仍会自动执行迁移并修改数据库结构
+- 如果你这次明确要求“连表结构都不要动”，先检查 `backend/src/main/resources/db/migration/` 是否新增了 SQL 文件；有新增时，先备份数据库再发版
 
 ---
 
