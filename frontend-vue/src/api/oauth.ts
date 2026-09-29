@@ -1,25 +1,24 @@
 import http from './http'
 
-export interface OAuthAuthorization {
-  id: string
+/** 按客户端汇总的授权（刷新令牌轮换产生的多条记录已在后端合并） */
+export interface OAuthClientAuthorization {
   clientId: string
   clientName: string
   scope: string
-  createdAt: string
+  authorizedAt: string | null
   lastUsedAt: string | null
-  expiresAt: string
-  revokedAt: string | null
+  expiresAt: string | null
+  active: boolean
 }
 
-export async function listAuthorizations() {
-  const { data } = await http.get<{ authorizations: OAuthAuthorization[] }>(
-    '/api/v1/oauth/authorizations',
-  )
-  return data.authorizations
+export async function listClientAuthorizations() {
+  const { data } = await http.get<{ clients: OAuthClientAuthorization[] }>('/api/v1/oauth/authorizations')
+  return data.clients
 }
 
-export async function revokeAuthorization(id: string) {
-  await http.delete(`/api/v1/oauth/authorizations/${id}`)
+/** 撤销某个客户端下的全部令牌 */
+export async function revokeClientAuthorization(clientId: string) {
+  await http.delete(`/api/v1/oauth/authorizations/clients/${encodeURIComponent(clientId)}`)
 }
 
 export async function revokeAllAuthorizations() {

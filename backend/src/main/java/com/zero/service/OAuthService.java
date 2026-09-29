@@ -6,6 +6,7 @@ import com.zero.config.JwtProperties;
 import com.zero.domain.OAuthAuthorizationCode;
 import com.zero.domain.OAuthAuthorizationView;
 import com.zero.domain.OAuthClient;
+import com.zero.domain.OAuthClientAuthorization;
 import com.zero.domain.OAuthRefreshToken;
 import com.zero.domain.User;
 import com.zero.mapper.OAuthMapper;
@@ -17,11 +18,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -203,8 +207,59 @@ public class OAuthService {
     }
   }
 
-  public List<OAuthAuthorizationView> listAuthorizations(String userId) {
-    return oauthMapper.listAuthorizations(userId);
+  public List<OAuthClientAuthorization> listClientAuthorizations(String userId) {
+    return groupByClient(oauthMapper.listAuthorizations(userId), Instant.now());
+  }
+
+  /** 撤销该用户在某个客户端下的全部令牌 */
+  public void revokeClientAuthorization(String userId, String clientId) {
+    oauthMapper.revokeUserClientRefreshTokens(userId, clientId);
+  }
+
+  /** 把逐条的刷新令牌按 clientId 合并，有效的排在前面，再按最近使用倒序 */
+  static List<OAuthClientAuthorization> groupByClient(List<OAuthAuthorizationView> tokens, Instant now) {
+    Map<String, List<OAuthAuthorizationView>> byClient = new LinkedHashMap<>();
+    for (OAuthAuthorizationView t : tokens) {
+      byClient.computeIfAbsent(t.getClientId(), k -> new ArrayList<>()).add(t);
+    }
+    List<OAuthClientAuthorization> out = new ArrayList<>();
+    for (List<OAuthAuthorizationView> group : byClient.values()) {
+      List<OAuthAuthorizationView> live = group.stream().filter(t -> isLive(t, now)).toList();
+      List<OAuthAuthorizationView> basis = live.isEmpty() ? group : live;
+      OAuthAuthorizationView latest =
+          basis.stream().max(Comparator.comparing(OAuthAuthorizationView::getCreatedAt, nullsFirst())).orElseThrow();
+      out.add(
+          new OAuthClientAuthorization(
+              latest.getClientId(),
+              latest.getClientName(),
+              latest.getScope(),
+              group.stream().map(OAuthAuthorizationView::getCreatedAt).filter(Objects::nonNull).min(String::compareTo).orElse(null),
+              group.stream().map(OAuthAuthorizationView::getLastUsedAt).filter(Objects::nonNull).max(String::compareTo).orElse(null),
+              basis.stream().map(OAuthAuthorizationView::getExpiresAt).filter(Objects::nonNull).max(String::compareTo).orElse(null),
+              !live.isEmpty()));
+    }
+    out.sort(
+        Comparator.comparing(OAuthClientAuthorization::active)
+            .reversed()
+            .thenComparing(
+                c -> c.lastUsedAt() != null ? c.lastUsedAt() : c.authorizedAt(),
+                Comparator.nullsLast(Comparator.<String>reverseOrder())));
+    return out;
+  }
+
+  private static boolean isLive(OAuthAuthorizationView t, Instant now) {
+    if (t.getRevokedAt() != null) {
+      return false;
+    }
+    try {
+      return t.getExpiresAt() == null || Instant.parse(t.getExpiresAt()).isAfter(now);
+    } catch (DateTimeParseException e) {
+      return true;
+    }
+  }
+
+  private static Comparator<String> nullsFirst() {
+    return Comparator.nullsFirst(Comparator.naturalOrder());
   }
 
   public void revokeAuthorization(String userId, String id) {

@@ -1,6 +1,6 @@
 package com.zero.web;
 
-import com.zero.domain.OAuthAuthorizationView;
+import com.zero.domain.OAuthClientAuthorization;
 import com.zero.service.OAuthService;
 import com.zero.support.CurrentUser;
 import java.util.List;
@@ -22,15 +22,23 @@ public class OAuthManagementController {
   }
 
   @GetMapping
-  public Map<String, List<OAuthAuthorizationView>> list() {
+  public Map<String, List<OAuthClientAuthorization>> list() {
     String uid = CurrentUser.require().userId();
-    return Map.of("authorizations", oauthService.listAuthorizations(uid));
+    return Map.of("clients", oauthService.listClientAuthorizations(uid));
   }
 
   @DeleteMapping("/{id:[a-fA-F0-9]{32}}")
   public Map<String, Boolean> revoke(@PathVariable String id) {
     String uid = CurrentUser.require().userId();
     oauthService.revokeAuthorization(uid, id);
+    return Map.of("ok", true);
+  }
+
+  /** 撤销某个客户端：该客户端下的所有令牌一并失效 */
+  @DeleteMapping("/clients/{clientId:[A-Za-z0-9_-]{1,80}}")
+  public Map<String, Boolean> revokeClient(@PathVariable String clientId) {
+    String uid = CurrentUser.require().userId();
+    oauthService.revokeClientAuthorization(uid, clientId);
     return Map.of("ok", true);
   }
 

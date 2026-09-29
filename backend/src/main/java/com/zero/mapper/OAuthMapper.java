@@ -71,6 +71,11 @@ public interface OAuthMapper {
           + "WHERE user_id = #{userId} AND revoked_at IS NULL")
   int revokeAllUserRefreshTokens(String userId);
 
+  @Update(
+      "UPDATE oauth_refresh_tokens SET revoked_at = CURRENT_TIMESTAMP "
+          + "WHERE user_id = #{userId} AND client_id = #{clientId} AND revoked_at IS NULL")
+  int revokeUserClientRefreshTokens(@Param("userId") String userId, @Param("clientId") String clientId);
+
   @Select(
       "SELECT rt.id, rt.client_id as clientId, c.client_name as clientName, rt.scope, "
           + "rt.created_at as createdAt, rt.last_used_at as lastUsedAt, rt.expires_at as expiresAt, "
