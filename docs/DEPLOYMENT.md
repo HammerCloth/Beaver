@@ -266,7 +266,22 @@ docker compose up -d --build
 
 ## 12. 数据备份（建议）
 
-数据库在容器内 `/data/zero.db`，对应卷 **`zero_data`**。升级前请自行备份（导出文件或按运维规范处理卷）。
+数据库在容器内 `/data/zero.db`，对应卷 **`zero_data`**。
+
+`./scripts/deploy.sh`（包括 CI 自动部署）在启动新版本前会**自动备份**：镜像构建完成后短暂停止后端，把数据库复制到项目根目录的 **`backups/zero-<时间>.db`**，校验通过后再启动新版本，默认保留最近 10 份。备份失败会中止部署并重新拉起原后端。
+
+- 调整保留份数：`BACKUP_KEEP=20 ./scripts/deploy.sh`
+- 跳过备份：`SKIP_DB_BACKUP=1 ./scripts/deploy.sh`
+
+从备份恢复：
+
+```bash
+docker compose stop backend
+docker cp backups/zero-20260101-120000.db "$(docker compose ps -a -q backend)":/data/zero.db
+docker compose start backend
+```
+
+`backups/` 与服务器在同一台机器上，只防误操作和升级失败；需要防磁盘损坏时，请再定期把它同步到其他地方。
 
 ---
 

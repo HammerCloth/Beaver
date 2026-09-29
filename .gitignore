@@ -10,3 +10,6 @@ backend/data/
 .vscode/
 frontend-vue/node_modules/
 frontend-vue/dist/
+
+# 部署脚本生成的数据库备份
+backups/
