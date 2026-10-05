@@ -1,8 +1,18 @@
-# 站点地址：本地默认 :80；生产可设为域名（如 example.com），Caddy 将自动申请 HTTPS。
-# 通过环境变量 CADDY_SITE 覆盖，docker-compose 已传入 ${CADDY_SITE:-:80}
-# 多个主机名：Caddyfile 要求「逗号后必须有空格」，例如：www.example.com, example.com（须与浏览器 Host 一致）
-# 浏览器里的域名必须与下列站点列表一致，否则 Caddy 不会走这个站点（表现为连不上或证书错误）
-{$CADDY_SITE} {
+# Beaver 自带的 Web 服务器：发前端静态文件，把接口转给后端。
+# 只在容器内监听 :80（docker-compose 默认映射到本机 127.0.0.1:8080），不处理域名和 HTTPS。
+# 要用域名访问，在前面放一个你自己的反向代理指向这个端口，见 docs/DEPLOYMENT.md。
+{
+  # 不申请证书，也不做 HTTP → HTTPS 跳转
+  auto_https off
+
+  servers {
+    # 信任前面那层反向代理传来的 X-Forwarded-Proto / X-Forwarded-Host。
+    # 否则它们会被改写成本层的 http，OAuth / MCP 元数据里的地址会变成 http://
+    trusted_proxies static private_ranges
+  }
+}
+
+:80 {
   log {
     output stdout
     format console
@@ -35,26 +45,4 @@
     try_files {path} /index.html
     file_server
   }
-}
-
-# Fanotter（本周新番排表）：纯静态站，和 Beaver 共用这个 Caddy，走子域名。
-# 站点地址来自环境变量 FANOTTER_SITE（docker-compose 已传入，默认 fanotter.localhost，不影响 Beaver）。
-# 目录由 Fanotter 仓库的 GitHub Actions 部署：/srv/fanotter/releases/<sha>，current 软链指向线上版本。
-{$FANOTTER_SITE:fanotter.localhost} {
-  log {
-    output stdout
-    format console
-  }
-
-  encode gzip
-
-  root * /srv/fanotter/current
-
-  # Vite 打包的资源文件名带哈希，可以长期缓存；index.html 不缓存，切换版本后立刻生效
-  @assets path /assets/*
-  header @assets Cache-Control "public, max-age=31536000, immutable"
-  header /index.html Cache-Control "no-cache"
-
-  try_files {path} /index.html
-  file_server
 }

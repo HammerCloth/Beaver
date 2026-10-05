@@ -15,7 +15,7 @@ services:
       APP_ENV: production
       APP_PORT: "8080"
       DATABASE_PATH: /data/zero.db
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
       # 不提供默认值：公开的默认密钥等于任何人都能伪造登录令牌。未配置时 compose 直接报错
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?请在 .env 中设置 JWT_ACCESS_SECRET（例如 openssl rand -base64 48）}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?请在 .env 中设置 JWT_REFRESH_SECRET（例如 openssl rand -base64 48）}
@@ -23,6 +23,7 @@ services:
       - zero_data:/data
     restart: unless-stopped
 
+  # 发前端静态文件并把接口转给后端，不处理域名和 HTTPS
   caddy:
     image: caddy:2.8-alpine
     container_name: beaver-caddy
@@ -30,24 +31,15 @@ services:
       - backend
     networks:
       - app
+    # 默认只对本机开放；要用域名和 HTTPS，在前面放一个反向代理指向这个端口（见 docs/DEPLOYMENT.md）。
+    # 局域网内直接访问可设 BEAVER_BIND=0.0.0.0
     ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      CADDY_SITE: ${CADDY_SITE:-:80}
-      # Fanotter 子域名；未设置时为 fanotter.localhost，不影响 Beaver
-      FANOTTER_SITE: ${FANOTTER_SITE:-fanotter.localhost}
+      - "${BEAVER_BIND:-127.0.0.1}:${BEAVER_PORT:-8080}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./frontend-vue/dist:/srv/frontend:ro
-      # Fanotter 的静态文件，由其仓库的 GitHub Actions 部署到服务器的 /srv/fanotter
-      - /srv/fanotter:/srv/fanotter:ro
-      - caddy_data:/data
-      - caddy_config:/config
     restart: unless-stopped
 
 volumes:
   # 卷名沿用改名前的 zero_data：改名会挂上一个新的空卷，导致现有数据库“消失”
   zero_data:
-  caddy_data:
-  caddy_config:

@@ -17,18 +17,22 @@ else
 fi
 
 echo ""
-echo "========== 2. .env 与 CADDY_SITE（须与浏览器地址一致；www 与根域要都写上或只访问配置的那一个）=========="
+echo "========== 2. .env（FRONTEND_ORIGIN 须与浏览器地址栏一致，含 https://）=========="
+PORT=8080
+BIND=127.0.0.1
 if [[ -f .env ]]; then
-  grep -E '^(FRONTEND_ORIGIN|CADDY_SITE)=' .env 2>/dev/null | sed 's/=.*/=***/' || true
-  RAW_SITE=$(grep -E '^CADDY_SITE=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r' || true)
-  if [[ -n "${RAW_SITE}" ]]; then
-    FIRST="${RAW_SITE%%,*}"
-    FIRST="${FIRST// /}"
-    echo "       解析到的第一个站点标识: ${FIRST}"
+  grep -E '^(FRONTEND_ORIGIN|BEAVER_PORT|BEAVER_BIND)=' .env 2>/dev/null || true
+  RAW_PORT=$(grep -E '^BEAVER_PORT=' .env 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '\r" ' || true)
+  RAW_BIND=$(grep -E '^BEAVER_BIND=' .env 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '\r" ' || true)
+  [[ -n "${RAW_PORT}" ]] && PORT="${RAW_PORT}"
+  [[ -n "${RAW_BIND}" ]] && BIND="${RAW_BIND}"
+  if grep -qE '^CADDY_SITE=' .env 2>/dev/null; then
+    echo "[提示] .env 里还有 CADDY_SITE：已不再使用，域名与 HTTPS 交给你前面的反向代理"
   fi
 else
-  echo "[警告] 未找到 .env（Compose 会用默认值 CADDY_SITE=:80，不适合域名 HTTPS）"
+  echo "[警告] 未找到 .env"
 fi
+echo "       Beaver 监听: ${BIND}:${PORT}"
 
 echo ""
 echo "========== 3. 容器状态 =========="
@@ -50,8 +54,12 @@ else
 fi
 
 echo ""
-echo "========== 6. 本机对 Caddy 的 HTTP 探测（仅说明本机 80 是否有响应）========="
-curl -sI --connect-timeout 3 "http://127.0.0.1/" | head -6 || echo "（本机 127.0.0.1:80 无响应：检查容器是否 up、防火墙、端口映射）"
+echo "========== 6. 本机对 Beaver 的 HTTP 探测 =========="
+if curl -sI --connect-timeout 3 "http://127.0.0.1:${PORT}/" | head -6; then
+  echo "(127.0.0.1:${PORT} 有响应：Beaver 本身正常；若域名打不开，问题在前面的反向代理、DNS 或防火墙)"
+else
+  echo "（127.0.0.1:${PORT} 无响应：检查容器是否 up、端口映射与 BEAVER_PORT）"
+fi
 
 echo ""
 echo "完成。优先对照 §1：若 dist 缺失，网站会空白或无法加载。"
