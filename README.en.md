@@ -41,7 +41,7 @@ Beaver is not a transaction-by-transaction ledger. Every now and then (say, at m
 |---|---|
 | Backend `backend/` | Spring Boot 3, MyBatis, SQLite, Flyway (migrations run on startup) |
 | Frontend `frontend-vue/` | Vue 3, Vite, TypeScript, Naive UI, Pinia, ECharts, vue-i18n |
-| Deployment | Docker Compose (`backend` + `caddy`); Caddy serves static files, reverse-proxies the API and handles HTTPS |
+| Deployment | Docker Compose (`backend` + `caddy`); Caddy serves the frontend and reverse-proxies the API; domains and HTTPS are left to your own reverse proxy |
 | CI/CD | GitHub Actions: backend tests, frontend type check and build, then deploy over SSH |
 
 ## Getting started (local development)
@@ -93,7 +93,6 @@ In production Beaver runs with Docker Compose, and the database lives in the Doc
 
    ```dotenv
    FRONTEND_ORIGIN=https://app.example.com
-   CADDY_SITE=app.example.com
    JWT_ACCESS_SECRET=<long random string>
    JWT_REFRESH_SECRET=<another long random string>
    ```
@@ -106,7 +105,17 @@ In production Beaver runs with Docker Compose, and the database lives in the Doc
 
    It builds the frontend and images, **backs up the database** to `backups/zero-<timestamp>.db` (keeping the latest 10), then starts the new version. If any step fails, it brings the previous backend back up.
 
-3. Optional: enable automatic deploys with GitHub Actions. Set the repository secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and `DEPLOY_PATH`, and the repository variable `ENABLE_AUTO_DEPLOY=true`. Every push to `main` that passes the tests is then deployed.
+   Beaver then listens on `http://127.0.0.1:8080` only (change the port with `BEAVER_PORT`).
+
+3. To serve it on a domain over HTTPS, put a reverse proxy (Caddy, Nginx, …) in front of `127.0.0.1:8080` that forwards `X-Forwarded-Proto` and `X-Forwarded-Host`. With Caddy it is two lines:
+
+   ```caddyfile
+   app.example.com {
+     reverse_proxy 127.0.0.1:8080
+   }
+   ```
+
+4. Optional: enable automatic deploys with GitHub Actions. Set the repository secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and `DEPLOY_PATH`, and the repository variable `ENABLE_AUTO_DEPLOY=true`. Every push to `main` that passes the tests is then deployed.
 
 Server setup, domains and HTTPS, firewalls, restoring from a backup and troubleshooting are covered in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (Chinese).
 

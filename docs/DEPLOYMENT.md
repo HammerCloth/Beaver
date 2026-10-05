@@ -1,4 +1,4 @@
-# 生产环境部署指南（Docker + Caddy）
+# 生产环境部署指南（Docker + 反向代理）
 
 本文说明如何把 **Project Zero** 部署到一台远程 Linux 主机（VPS），并让用户通过浏览器访问。  
 部署命令均在 **服务器上** 通过 SSH 执行。
@@ -25,7 +25,8 @@
 |------|------|
 | 后端 | **Spring Boot 3**，容器内 `APP_PORT=8080`，SQLite 文件在卷 **`zero_data`**（`/data/zero.db`）。启动时 Flyway 自动迁移。 |
 | 前端 | **Vue 3 + Vite**，须在部署前构建 **`frontend-vue/dist`**；`docker-compose` 将该目录只读挂载到 Caddy 的 `/srv/frontend`。 |
-| 入口 | Caddy：`/api/*` → `backend:8080`；其余路径为静态 SPA。 |
+| Web | Caddy（容器 `beaver-caddy`）：`/api/*`、`/mcp`、`/oauth/*` → `backend:8080`，其余路径为静态 SPA。只在本机 **`127.0.0.1:8080`** 监听，**不处理域名与 HTTPS**。 |
+| 入口 | **你自己的反向代理**（§8）：负责域名和 HTTPS 证书，转发到 `127.0.0.1:8080`。同一台机器上的其他站点也由它统一处理。 |
 
 ---
 
@@ -151,20 +152,15 @@ cd /opt/你的仓库名/zero
 nano .env
 ```
 
-**有域名、HTTPS（推荐）** 示例：
+示例：
 
 ```env
 FRONTEND_ORIGIN=https://app.example.com
 JWT_ACCESS_SECRET=第一个随机串
 JWT_REFRESH_SECRET=第二个随机串
-CADDY_SITE=app.example.com
-```
-
-若用户既可能访问 **`www`** 又可能访问**根域**，建议**同时写在 `CADDY_SITE`**。Caddy 的 Caddyfile 里**多个站点地址**写法为「英文逗号 + 逗号后一个空格」，**不能**写成 `a.com,b.com`（会整段被当成一个非法地址）。例如：
-
-```env
-FRONTEND_ORIGIN=https://www.example.com
-CADDY_SITE=www.example.com, example.com
+# 可选：Beaver 在本机监听的端口与地址，默认 127.0.0.1:8080
+# BEAVER_PORT=8080
+# BEAVER_BIND=127.0.0.1
 ```
 
 ```bash
@@ -172,7 +168,8 @@ chmod 600 .env
 ```
 
 - `FRONTEND_ORIGIN`：必须与浏览器地址栏一致（含 `https://`）。若同时存在 **www 与根域**访问，可写多个来源（**英文逗号分隔**），例如：`https://www.example.com,https://example.com`。只配一个而用户访问另一个时，登录后接口会因 **CORS** 失败，页面可能白屏。
-- `CADDY_SITE`：只写域名；多域名时须 **`域名, 空格域名`**（逗号后必须有空格），否则 Caddy 启动会报错。Caddy 将申请 Let’s Encrypt（需域名解析到本机且 80/443 可达）。
+- `BEAVER_PORT` / `BEAVER_BIND`：Beaver 对宿主机开放的端口和地址。默认只绑定 `127.0.0.1`，外网无法直接访问，必须经过 §8 的反向代理；局域网内直接访问可设 `BEAVER_BIND=0.0.0.0`。
+- 旧版本的 `CADDY_SITE` 已不再使用，留在 `.env` 里也没有影响。
 - 勿将 `.env` 提交到 Git（`zero/.gitignore` 已忽略）。
 
 ---
@@ -191,9 +188,40 @@ cd ..
 
 ---
 
-## 8. 域名解析（使用 HTTPS 时）
+## 8. 域名与 HTTPS：在前面放一个反向代理
 
-在 DNS 控制台添加 **A 记录**：主机名（如 `app`）→ 服务器**公网 IP**。等待生效后再启动服务。
+Beaver 自己不处理域名和证书，只在本机 `127.0.0.1:8080` 提供服务。对外访问需要一个反向代理占用 80/443，负责 HTTPS，再转发到这个端口。这样同一台服务器上的其他网站也能共用同一个入口。
+
+1. **DNS**：在域名控制台添加 **A 记录**：主机名（如 `app`）→ 服务器**公网 IP**。
+2. **反向代理**：任选其一。要求是转发时带上 **`X-Forwarded-Proto`** 和 **`X-Forwarded-Host`**，Beaver 的 OAuth / MCP 地址靠它们生成；缺了会变成 `http://` 地址，MCP 客户端无法授权。
+
+   **Caddy**（推荐，自动申请和续期证书，默认就会带上这两个头）。可以直接装在系统里，也可以用 Docker 运行（需 `network_mode: host` 才能访问宿主机的 `127.0.0.1:8080`）。Caddyfile：
+
+   ```caddyfile
+   app.example.com {
+     reverse_proxy 127.0.0.1:8080
+   }
+   ```
+
+   **Nginx**（证书用 certbot 等自行申请）：
+
+   ```nginx
+   server {
+     listen 443 ssl;
+     server_name app.example.com;
+     # ssl_certificate / ssl_certificate_key ...
+
+     location / {
+       proxy_pass http://127.0.0.1:8080;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Forwarded-Host $host;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+     }
+   }
+   ```
+
+3. 确认 DNS 已生效、80/443 已放行后再启动反向代理，否则证书申请会失败。
 
 ---
 
@@ -215,7 +243,7 @@ docker compose logs -f --tail=100
 
 均在 **`zero` 目录**（与 `docker-compose.yml` 同级）执行。
 
-**Caddy**（反向代理、TLS、静态资源、`Caddyfile` 报错多出现在此）：
+**Caddy**（静态资源、接口转发、`Caddyfile` 报错多出现在此）：
 
 ```bash
 docker compose logs -f caddy
@@ -332,25 +360,27 @@ docker compose start backend
 
 | 现象 | 排查 |
 |------|------|
-| **打不开 / 白屏 / 一直转圈** | **先看 `ls frontend-vue/dist/index.html`**：不存在则必须先 `cd frontend-vue && npm ci && npm run build`（或 `./scripts/deploy.sh`）。再查：`docker compose ps`；**`CADDY_SITE` / `FRONTEND_ORIGIN` 是否与浏览器地址一致**（`www` 与根域是否都写入 `CADDY_SITE`）；云安全组与本机 **ufw** 是否放行 80/443；DNS 是否指向本机 IP。在 **`zero` 目录**执行 **`./scripts/diagnose.sh`** 可快速汇总上述检查。 |
-| 网页打不开 | `docker compose ps`；云安全组与本机 **ufw** 是否放行 80/443；DNS 是否指向本机 IP |
-| **感觉 Caddy「没监听到」域名 / 证书不对** | Caddy **按站点块匹配浏览器 `Host`**，不是「任意域名进来都算」。**`.env` 里 `CADDY_SITE` 必须包含你实际访问的主机名**（例如只配了根域却访问 `www`，或相反，会不匹配）。建议同时写：`CADDY_SITE=www.example.com, example.com`（注意逗号后有空格），且 **`FRONTEND_ORIGIN` 与地址栏一致**。核对 DNS：**域名拼写**（常见笔误 `online` 写成 `onlne`）、A 记录是否指向本机公网 IP。改 `.env` 后执行 `docker compose up -d --force-recreate`。已开启访问日志：`docker compose logs -f caddy`，请求到达时会有访问记录；**若完全无新日志**，说明流量未到本机（DNS/防火墙/端口）。 |
+| **打不开 / 白屏 / 一直转圈** | **先看 `ls frontend-vue/dist/index.html`**：不存在则必须先 `cd frontend-vue && npm ci && npm run build`（或 `./scripts/deploy.sh`）。再在服务器上执行 `curl -I http://127.0.0.1:8080/`：有响应说明 Beaver 本身正常，问题在反向代理、DNS 或防火墙。在 **`zero` 目录**执行 **`./scripts/diagnose.sh`** 可快速汇总上述检查。 |
+| 域名打不开，但 `127.0.0.1:8080` 正常 | 反向代理是否在跑、是否指向 `127.0.0.1:8080`；云安全组与本机 **ufw** 是否放行 80/443；DNS 是否指向本机 IP |
 | **502**，日志含 `lookup backend` / `127.0.0.11` / `server misbehaving` | **先确认后端在跑**：`docker compose ps`、`docker compose logs backend`。再在 Caddy 容器内测解析：`docker exec beaver-caddy wget -qO- http://backend:8080/healthz`。若 `backend` 解析失败，在同一目录执行 `docker compose down && docker compose up -d --build`（勿单独用 `docker run` 起 Caddy）。勿在 `/etc/docker/daemon.json` 里把容器 DNS 改成仅公网 DNS，否则会破坏服务名解析。 |
 | 登录后 401 / CORS | `FRONTEND_ORIGIN` 是否与浏览器地址完全一致 |
-| HTTPS 证书失败 | 域名是否解析到本机；**80** 是否对公网开放（Let’s Encrypt HTTP-01） |
+| MCP 授权失败，OAuth 元数据里是 `http://` | 反向代理没有转发 `X-Forwarded-Proto` / `X-Forwarded-Host`（见 §8） |
+| HTTPS 证书失败 | 这是反向代理的问题：域名是否解析到本机；**80** 是否对公网开放（Let’s Encrypt HTTP-01） |
 
 ---
 
 ## 14. 仅 IP、不配域名（测试）
 
+不放反向代理，直接把 Beaver 的端口开到公网或局域网：
+
 ```env
-FRONTEND_ORIGIN=http://你的公网IP
-CADDY_SITE=:80
+FRONTEND_ORIGIN=http://你的公网IP:8080
+BEAVER_BIND=0.0.0.0
 JWT_ACCESS_SECRET=...
 JWT_REFRESH_SECRET=...
 ```
 
-纯 IP 下 Cookie/安全策略与 HTTPS 域名不同，仅建议联调；生产请用**域名 + HTTPS**。
+并在防火墙放行 8080。纯 IP 下 Cookie/安全策略与 HTTPS 域名不同，仅建议联调；生产请用**域名 + HTTPS**。
 
 ---
 

@@ -66,7 +66,7 @@ oauth_refresh_tokens
 https://app.example.com
 ```
 
-实际使用时替换为你的 `CADDY_SITE` 域名。远程 MCP URL 固定为：
+实际使用时替换为你访问 Beaver 的域名（与 `FRONTEND_ORIGIN` 一致）。远程 MCP URL 固定为：
 
 ```text
 https://app.example.com/mcp

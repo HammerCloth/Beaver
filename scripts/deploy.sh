@@ -16,7 +16,7 @@ DB_PATH_IN_CONTAINER="/data/zero.db"
 
 if [[ ! -f .env ]]; then
   echo "错误：未找到 $ROOT/.env"
-  echo "请先按 docs/DEPLOYMENT.md 创建并填写 FRONTEND_ORIGIN、JWT_ACCESS_SECRET、JWT_REFRESH_SECRET、CADDY_SITE"
+  echo "请先按 docs/DEPLOYMENT.md 创建并填写 FRONTEND_ORIGIN、JWT_ACCESS_SECRET、JWT_REFRESH_SECRET"
   exit 1
 fi
 
