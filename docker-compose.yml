@@ -4,7 +4,10 @@ networks:
     driver: bridge
 
 services:
+  # 镜像由 CI 构建并发布到 GHCR；BEAVER_VERSION 可指定某次提交的 sha，默认 latest。
+  # 想从源码构建：docker compose build（或 BUILD_FROM_SOURCE=1 ./scripts/deploy.sh）
   backend:
+    image: ${BEAVER_IMAGE:-ghcr.io/hammercloth/beaver}-backend:${BEAVER_VERSION:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -23,9 +26,12 @@ services:
       - zero_data:/data
     restart: unless-stopped
 
-  # 发前端静态文件并把接口转给后端，不处理域名和 HTTPS
+  # 发前端静态文件并把接口转给后端，不处理域名和 HTTPS。前端和 Caddyfile 已打进镜像
   caddy:
-    image: caddy:2.8-alpine
+    image: ${BEAVER_IMAGE:-ghcr.io/hammercloth/beaver}-web:${BEAVER_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: web.Dockerfile
     container_name: beaver-caddy
     depends_on:
       - backend
@@ -35,9 +41,6 @@ services:
     # 局域网内直接访问可设 BEAVER_BIND=0.0.0.0
     ports:
       - "${BEAVER_BIND:-127.0.0.1}:${BEAVER_PORT:-8080}:80"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./frontend-vue/dist:/srv/frontend:ro
     restart: unless-stopped
 
 volumes:

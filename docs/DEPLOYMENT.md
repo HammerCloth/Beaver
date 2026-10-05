@@ -24,7 +24,7 @@
 | 组件 | 说明 |
 |------|------|
 | 后端 | **Spring Boot 3**，容器内 `APP_PORT=8080`，SQLite 文件在卷 **`zero_data`**（`/data/zero.db`）。启动时 Flyway 自动迁移。 |
-| 前端 | **Vue 3 + Vite**，须在部署前构建 **`frontend-vue/dist`**；`docker-compose` 将该目录只读挂载到 Caddy 的 `/srv/frontend`。 |
+| 镜像 | GitHub Actions 构建 **`ghcr.io/hammercloth/beaver-backend`** 与 **`ghcr.io/hammercloth/beaver-web`**（前端已打进 Web 镜像），支持 amd64 / arm64。服务器只拉镜像，**不需要 Node、不在服务器上编译**。 |
 | Web | Caddy（容器 `beaver-caddy`）：`/api/*`、`/mcp`、`/oauth/*` → `backend:8080`，其余路径为静态 SPA。只在本机 **`127.0.0.1:8080`** 监听，**不处理域名与 HTTPS**。 |
 | 入口 | **你自己的反向代理**（§8）：负责域名和 HTTPS 证书，转发到 `127.0.0.1:8080`。同一台机器上的其他站点也由它统一处理。 |
 
@@ -72,20 +72,16 @@ sudo usermod -aG docker "$USER"
 
 ---
 
-## 2. 安装 Node.js（Ubuntu，用于构建前端）
+## 2. （可选）安装 Node.js
 
-在服务器上构建 `frontend-vue/dist` 需要 **Node 20+**（本项目使用 **Node 22** 与 [NodeSource](https://github.com/nodesource/distributions)）：
+服务器**不需要 Node**：镜像由 CI 构建，部署时直接拉取。只有在服务器上从源码构建（`BUILD_FROM_SOURCE=1`）时才用得到，而且源码构建也在 Docker 里完成，同样不需要在系统里装 Node。
+
+只有想在服务器上跑前端开发服务器之类的场景才需要它：
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
-node -v
-npm -v
 ```
-
-缺少 `curl` 时：`sudo apt-get install -y curl`。
-
-**不在服务器上装 Node 的替代做法：** 在你本机于 `frontend-vue` 下执行 `npm ci && npm run build`，将 **`frontend-vue/dist`** 上传到服务器的 `zero/frontend-vue/dist`，然后只执行 `docker compose up`（服务器仅需 Docker）。
 
 ---
 
@@ -174,17 +170,19 @@ chmod 600 .env
 
 ---
 
-## 7. 构建前端静态资源
+## 7. 镜像从哪来
 
-```bash
-cd /opt/你的仓库名/zero
-cd frontend-vue
-npm ci
-npm run build
-cd ..
-```
+`docker-compose.yml` 里的两个服务直接使用 CI 发布的镜像：
 
-确认存在 **`frontend-vue/dist/`**（含 `index.html`）。Caddy 挂载该目录为静态站点根（见 `docker-compose.yml`）。
+| 服务 | 镜像 |
+|------|------|
+| `backend` | `ghcr.io/hammercloth/beaver-backend:${BEAVER_VERSION:-latest}` |
+| `caddy` | `ghcr.io/hammercloth/beaver-web:${BEAVER_VERSION:-latest}`（Caddy + 编译好的前端 + Caddyfile） |
+
+- 推送到 `main` 后，CI 会构建并发布 `latest` 和以完整提交 sha 命名的标签；推送 `v*` 标签时另发布版本号标签。
+- `BEAVER_VERSION` 不设时用 `latest`；CI 自动部署时会传入本次提交的 sha，保证部署的正是刚构建的那一版。
+- 想用 fork 的镜像：在 `.env` 里设 `BEAVER_IMAGE=ghcr.io/<你的用户名>/beaver`。
+- 想完全从源码构建：`BUILD_FROM_SOURCE=1 ./scripts/deploy.sh`，或 `docker compose build && docker compose up -d`。
 
 ---
 
@@ -227,11 +225,9 @@ Beaver 自己不处理域名和证书，只在本机 `127.0.0.1:8080` 提供服�
 
 ## 9. 启动服务
 
-**必须先有 `frontend-vue/dist/`（含 `index.html`）。** 该目录**不会**随 `git clone` / `git pull` 出现（前端构建产物在 `.gitignore` 里）。若跳过 §7 直接起容器，浏览器往往**白屏、空白或 404**。
-
 ```bash
 cd /opt/你的仓库名/zero
-docker compose up -d --build
+./scripts/deploy.sh          # 拉取镜像、备份数据库、启动
 ```
 
 ```bash
@@ -292,32 +288,31 @@ GIT_PULL=1 ./scripts/deploy.sh
 
 数据在卷 **`zero_data`**（SQLite），不删卷则数据保留。新版本若包含 Flyway 迁移，后端启动时会自动修改表结构。
 
-### 只更新 Vue 前端
+### 回到某个旧版本
 
-适用场景：只改了 `frontend-vue/`，不需要重发后端。
+每次提交都有以 sha 命名的镜像，回滚不需要重新编译：
 
 ```bash
-git pull
-cd frontend-vue
-npm ci
-npm run build
-cd ..
-docker compose restart caddy
+BEAVER_VERSION=<旧提交的完整 sha> ./scripts/deploy.sh
 ```
 
-说明：
+数据库结构如果被新版本的 Flyway 迁移改过，旧版本可能无法读取，回滚前先确认 `backend/src/main/resources/db/migration/` 在这两个版本之间有没有新增文件；有的话用 §12 的备份一起恢复。
 
-- 前端静态文件直接输出到 `frontend-vue/dist/`
-- Caddy 挂载这个目录并对外提供页面
-- 这个流程不会重建后端容器，也不会动当前数据库
+### 只更新前端（不重启后端）
+
+```bash
+docker compose pull caddy
+docker compose up -d caddy
+```
+
+- 只替换 Web 容器，不会重建后端容器，也不会动当前数据库
 
 ### 只更新后端（保留当前数据库）
 
 适用场景：只改了 `backend/`，希望保留当前线上数据。
 
 ```bash
-git pull
-docker compose build backend
+docker compose pull backend
 docker compose up -d backend
 ```
 
@@ -339,7 +334,7 @@ docker compose up -d backend
 
 数据库在容器内 `/data/zero.db`，对应卷 **`zero_data`**。
 
-`./scripts/deploy.sh`（包括 CI 自动部署）在启动新版本前会**自动备份**：镜像构建完成后短暂停止后端，把数据库复制到项目根目录的 **`backups/zero-<时间>.db`**，校验通过后再启动新版本，默认保留最近 10 份。备份失败会中止部署并重新拉起原后端。
+`./scripts/deploy.sh`（包括 CI 自动部署）在启动新版本前会**自动备份**：新镜像拉取完成后短暂停止后端，把数据库复制到项目根目录的 **`backups/zero-<时间>.db`**，校验通过后再启动新版本，默认保留最近 10 份。备份失败会中止部署并重新拉起原后端。
 
 - 调整保留份数：`BACKUP_KEEP=20 ./scripts/deploy.sh`
 - 跳过备份：`SKIP_DB_BACKUP=1 ./scripts/deploy.sh`
@@ -360,9 +355,9 @@ docker compose start backend
 
 | 现象 | 排查 |
 |------|------|
-| **打不开 / 白屏 / 一直转圈** | **先看 `ls frontend-vue/dist/index.html`**：不存在则必须先 `cd frontend-vue && npm ci && npm run build`（或 `./scripts/deploy.sh`）。再在服务器上执行 `curl -I http://127.0.0.1:8080/`：有响应说明 Beaver 本身正常，问题在反向代理、DNS 或防火墙。在 **`zero` 目录**执行 **`./scripts/diagnose.sh`** 可快速汇总上述检查。 |
+| **打不开 / 白屏 / 一直转圈** | 先在服务器上执行 `curl -I http://127.0.0.1:8080/`：有响应说明 Beaver 本身正常，问题在反向代理、DNS 或防火墙；没有响应看 `docker compose ps` 和 `docker compose logs`。镜像拉取失败（`docker compose pull` 报错）时，检查服务器能否访问 `ghcr.io`。在 **`zero` 目录**执行 **`./scripts/diagnose.sh`** 可快速汇总上述检查。 |
 | 域名打不开，但 `127.0.0.1:8080` 正常 | 反向代理是否在跑、是否指向 `127.0.0.1:8080`；云安全组与本机 **ufw** 是否放行 80/443；DNS 是否指向本机 IP |
-| **502**，日志含 `lookup backend` / `127.0.0.11` / `server misbehaving` | **先确认后端在跑**：`docker compose ps`、`docker compose logs backend`。再在 Caddy 容器内测解析：`docker exec beaver-caddy wget -qO- http://backend:8080/healthz`。若 `backend` 解析失败，在同一目录执行 `docker compose down && docker compose up -d --build`（勿单独用 `docker run` 起 Caddy）。勿在 `/etc/docker/daemon.json` 里把容器 DNS 改成仅公网 DNS，否则会破坏服务名解析。 |
+| **502**，日志含 `lookup backend` / `127.0.0.11` / `server misbehaving` | **先确认后端在跑**：`docker compose ps`、`docker compose logs backend`。再在 Caddy 容器内测解析：`docker exec beaver-caddy wget -qO- http://backend:8080/healthz`。若 `backend` 解析失败，在同一目录执行 `docker compose down && docker compose up -d`（勿单独用 `docker run` 起 Caddy）。勿在 `/etc/docker/daemon.json` 里把容器 DNS 改成仅公网 DNS，否则会破坏服务名解析。 |
 | 登录后 401 / CORS | `FRONTEND_ORIGIN` 是否与浏览器地址完全一致 |
 | MCP 授权失败，OAuth 元数据里是 `http://` | 反向代理没有转发 `X-Forwarded-Proto` / `X-Forwarded-Host`（见 §8） |
 | HTTPS 证书失败 | 这是反向代理的问题：域名是否解析到本机；**80** 是否对公网开放（Let’s Encrypt HTTP-01） |
@@ -388,9 +383,10 @@ JWT_REFRESH_SECRET=...
 
 | 目的 | 命令 |
 |------|------|
-| 构建前端 + 启动（推荐） | `./scripts/deploy.sh` |
-| 仅构建前端 | `cd frontend-vue && npm ci && npm run build && cd ..` |
-| 启动/重建 | `docker compose up -d --build` |
+| 拉取镜像 + 备份 + 启动（推荐） | `./scripts/deploy.sh` |
+| 部署指定版本 | `BEAVER_VERSION=<sha> ./scripts/deploy.sh` |
+| 从源码构建并启动 | `BUILD_FROM_SOURCE=1 ./scripts/deploy.sh` |
+| 启动 | `docker compose up -d` |
 | 查看 Caddy 日志 | `docker compose logs -f caddy`（或 `docker logs -f beaver-caddy`） |
 | 查看后端日志 | `docker compose logs -f backend`（或 `docker logs -f beaver-backend`） |
 | 查看全部服务日志 | `docker compose logs -f` |
@@ -408,9 +404,9 @@ JWT_REFRESH_SECRET=...
 
 | 脚本 | 作用 | 典型用法 |
 |------|------|----------|
-| **`scripts/bootstrap-ubuntu.sh`** | 仅在**全新 Ubuntu 22.04/24.04** 上**一次性**安装 Docker、Node 22、ufw（需 **root/sudo**） | `sudo bash scripts/bootstrap-ubuntu.sh` |
-| **`scripts/deploy.sh`** | 在已有 **`zero/.env`** 的前提下：**构建前端 + `docker compose up`**；可选先 `git pull` | `cd /path/to/zero && ./scripts/deploy.sh` 或 `GIT_PULL=1 ./scripts/deploy.sh` |
-| **`scripts/diagnose.sh`** | **排查「打不开 / 白屏 / 502」**：检查 `frontend-vue/dist`、容器状态、Caddy/后端日志、caddy→backend 连通性 | `cd /path/to/zero && ./scripts/diagnose.sh` |
+| **`scripts/bootstrap-ubuntu.sh`** | 仅在**全新 Ubuntu 22.04/24.04** 上**一次性**安装 Docker、ufw（以及可选的 Node 22）（需 **root/sudo**） | `sudo bash scripts/bootstrap-ubuntu.sh` |
+| **`scripts/deploy.sh`** | 在已有 **`zero/.env`** 的前提下：**拉取镜像 → 备份数据库 → `docker compose up`**；可选先 `git pull`，或 `BUILD_FROM_SOURCE=1` 从源码构建 | `cd /path/to/zero && ./scripts/deploy.sh` 或 `GIT_PULL=1 ./scripts/deploy.sh` |
+| **`scripts/diagnose.sh`** | **排查「打不开 / 白屏 / 502」**：检查镜像版本、容器状态、Caddy/后端日志、caddy→backend 连通性 | `cd /path/to/zero && ./scripts/diagnose.sh` |
 
 **推荐流程：**
 
@@ -466,7 +462,7 @@ NodeSource **Node 22** 需要 **glibc ≥ 2.28**，CentOS 7 **无法满足**，�
 2. **试 Node 16 RPM**（可能仍失败或无法满足前端依赖）：  
    `curl -fsSL https://rpm.nodesource.com/setup_16.x | sudo bash -` → `yum install -y nodejs`  
 3. **nvm 安装 Node 16**（用户目录）。  
-4. **本机构建**：只上传 **`frontend-vue/dist`**，服务器只装 Docker。
+4. **不需要 Node**：服务器只装 Docker，直接拉取 CI 构建好的镜像即可。
 
 ---
 

@@ -42,7 +42,7 @@ Beaver 不做逐笔记账，而是定期（比如每月月底）给所有账户�
 | 后端 `backend/` | Spring Boot 3、MyBatis、SQLite、Flyway（启动时自动迁移） |
 | 前端 `frontend-vue/` | Vue 3、Vite、TypeScript、Naive UI、Pinia、ECharts、vue-i18n |
 | 部署 | Docker Compose（`backend` + `caddy`），Caddy 发前端静态文件并把接口转给后端；域名与 HTTPS 交给你自己的反向代理 |
-| CI/CD | GitHub Actions：后端测试、前端类型检查与构建，通过后 SSH 到服务器部署 |
+| CI/CD | GitHub Actions：后端测试、前端类型检查与构建，构建并发布镜像到 GHCR，再 SSH 到服务器拉取部署 |
 
 ## 快速开始（本地开发）
 
@@ -103,7 +103,7 @@ cd frontend-vue && npm run build   # 前端类型检查 + 构建
    ./scripts/deploy.sh
    ```
 
-   脚本会构建前端和镜像，**先备份数据库**到 `backups/zero-<时间>.db`（默认保留最近 10 份），再启动新版本；任一步失败都会重新拉起原来的后端。
+   脚本会拉取 CI 构建好的镜像（`ghcr.io/hammercloth/beaver-backend` 与 `beaver-web`，支持 amd64 / arm64，服务器上不编译），**先备份数据库**到 `backups/zero-<时间>.db`（默认保留最近 10 份），再启动新版本；任一步失败都会重新拉起原来的后端。
 
    启动后 Beaver 只在本机 `http://127.0.0.1:8080` 提供服务（端口可用 `BEAVER_PORT` 修改）。
 

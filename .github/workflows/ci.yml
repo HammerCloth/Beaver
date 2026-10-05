@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, master, spring-backend]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -38,10 +39,76 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
-  deploy:
+  # 构建 backend / web 两个镜像。PR 上只构建 amd64 用来验证，不推送；
+  # 其余情况构建 amd64 + arm64 并推到 GHCR：main 打 latest，每次提交打完整 sha，v* 标签打版本号
+  images:
     needs: [backend, frontend]
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_AUTO_DEPLOY == 'true') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUSH: ${{ github.event_name != 'pull_request' }}
+      PLATFORMS: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image name
+        # GHCR 要求小写；fork 会发布到自己的命名空间
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/beaver" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: env.PUSH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}-backend
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long,prefix=
+            type=semver,pattern={{version}}
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}-web
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long,prefix=
+            type=semver,pattern={{version}}
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web.Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  deploy:
+    needs: [images]
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_AUTO_DEPLOY == 'true') }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.2
@@ -50,14 +117,16 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
-          envs: DEPLOY_PATH
+          envs: DEPLOY_PATH,BEAVER_VERSION
           script: |
             set -euo pipefail
             cd "$DEPLOY_PATH"
             # 对齐到远端 main（而不是 pull --ff-only）：仓库历史改写过时也能部署；
-            # .env、backups/ 等未跟踪文件不受影响
+            # .env、backups/ 等未跟踪文件不受影响。这里只为拿到最新的 compose 和脚本，服务器上不再编译
             git fetch origin main
             git reset --hard origin/main
-            GIT_PULL=0 ./scripts/deploy.sh
+            # 部署本次提交刚构建的镜像，而不是 latest，避免两次推送交错时拉到别的版本
+            BEAVER_VERSION="$BEAVER_VERSION" GIT_PULL=0 ./scripts/deploy.sh
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          BEAVER_VERSION: ${{ github.sha }}
