@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# 在项目根目录下完成：可选 git pull → 构建前端与镜像 → 备份数据库 → docker compose up
+# 在项目根目录下完成：可选 git pull → 拉取镜像（或从源码构建）→ 备份数据库 → docker compose up
 # 用法: ./scripts/deploy.sh
-#       GIT_PULL=1 ./scripts/deploy.sh        # 先 git pull 再部署
-#       SKIP_DB_BACKUP=1 ./scripts/deploy.sh  # 跳过数据库备份
-#       BACKUP_KEEP=20 ./scripts/deploy.sh    # 保留最近 20 份备份（默认 10）
+#       BEAVER_VERSION=<提交 sha> ./scripts/deploy.sh  # 部署指定版本的镜像（默认 latest；CI 部署时会传入）
+#       BUILD_FROM_SOURCE=1 ./scripts/deploy.sh       # 不拉镜像，在本机从源码构建
+#       GIT_PULL=1 ./scripts/deploy.sh                # 先 git pull 再部署
+#       SKIP_DB_BACKUP=1 ./scripts/deploy.sh          # 跳过数据库备份
+#       BACKUP_KEEP=20 ./scripts/deploy.sh            # 保留最近 20 份备份（默认 10）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,8 +43,8 @@ check_secret() {
 check_secret JWT_ACCESS_SECRET
 check_secret JWT_REFRESH_SECRET
 
-if [[ ! -d frontend-vue ]]; then
-  echo "错误：未找到 frontend-vue 目录（应在项目根目录下执行本脚本）"
+if [[ ! -f docker-compose.yml ]]; then
+  echo "错误：未找到 docker-compose.yml（应在项目根目录下执行本脚本）"
   exit 1
 fi
 
@@ -51,12 +53,15 @@ if [[ "${GIT_PULL:-0}" == "1" ]]; then
   git pull
 fi
 
-echo "==> 构建前端 (npm ci && npm run build)..."
-(cd frontend-vue && npm ci && npm run build)
-
-# 先构建镜像，旧后端继续提供服务，把停机时间压缩到备份 + 重启
-echo "==> 构建 Docker 镜像..."
-docker compose build
+# 先准备好新镜像，旧版本继续提供服务，把停机时间压缩到备份 + 重启。
+# 拉取失败（网络、镜像不存在）会在这里退出，线上不受影响
+if [[ "${BUILD_FROM_SOURCE:-0}" == "1" ]]; then
+  echo "==> 从源码构建 Docker 镜像..."
+  docker compose build
+else
+  echo "==> 拉取镜像（版本 ${BEAVER_VERSION:-latest}）..."
+  docker compose pull
+fi
 
 # 备份时会先停掉后端；若之后任一步失败退出，把原后端拉起来，避免服务一直停着
 backend_stopped=0
@@ -115,6 +120,9 @@ backup_db
 echo "==> 启动 / 更新 Docker 服务..."
 docker compose up -d
 backend_stopped=0
+
+# 清理不再被容器使用的旧版本 Beaver 镜像（只动带 dev.beaver.component 标签的镜像）
+docker image prune -af --filter "label=dev.beaver.component" >/dev/null || true
 
 echo "==> 完成。查看: docker compose ps"
 echo "    日志: docker compose logs -f --tail=50"

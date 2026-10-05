@@ -42,7 +42,7 @@ Beaver is not a transaction-by-transaction ledger. Every now and then (say, at m
 | Backend `backend/` | Spring Boot 3, MyBatis, SQLite, Flyway (migrations run on startup) |
 | Frontend `frontend-vue/` | Vue 3, Vite, TypeScript, Naive UI, Pinia, ECharts, vue-i18n |
 | Deployment | Docker Compose (`backend` + `caddy`); Caddy serves the frontend and reverse-proxies the API; domains and HTTPS are left to your own reverse proxy |
-| CI/CD | GitHub Actions: backend tests, frontend type check and build, then deploy over SSH |
+| CI/CD | GitHub Actions: backend tests, frontend type check and build, publish images to GHCR, then deploy over SSH by pulling them |
 
 ## Getting started (local development)
 
@@ -103,7 +103,7 @@ In production Beaver runs with Docker Compose, and the database lives in the Doc
    ./scripts/deploy.sh
    ```
 
-   It builds the frontend and images, **backs up the database** to `backups/zero-<timestamp>.db` (keeping the latest 10), then starts the new version. If any step fails, it brings the previous backend back up.
+   It pulls the images built by CI (`ghcr.io/hammercloth/beaver-backend` and `beaver-web`, amd64 and arm64; nothing is compiled on the server), **backs up the database** to `backups/zero-<timestamp>.db` (keeping the latest 10), then starts the new version. If any step fails, it brings the previous backend back up.
 
    Beaver then listens on `http://127.0.0.1:8080` only (change the port with `BEAVER_PORT`).
 

@@ -6,14 +6,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "========== 1. 前端静态文件（最常见：git pull 后未构建，此处为空）=========="
-if [[ -f frontend-vue/dist/index.html ]]; then
-  echo "[OK] frontend-vue/dist/index.html 存在"
-  ls -la frontend-vue/dist | head -8
+echo "========== 1. 正在运行的镜像版本 =========="
+for c in beaver-backend beaver-caddy; do
+  if docker inspect "$c" >/dev/null 2>&1; then
+    echo "$c: $(docker inspect "$c" --format '{{.Config.Image}}')"
+  else
+    echo "[失败] 没有容器 $c，执行 ./scripts/deploy.sh"
+  fi
+done
+if docker compose exec -T caddy test -f /srv/frontend/index.html 2>/dev/null; then
+  echo "[OK] Web 镜像里有前端 index.html"
 else
-  echo "[失败] 没有 frontend-vue/dist/index.html"
-  echo "       修复: cd frontend-vue && npm ci && npm run build && cd .."
-  echo "       然后: docker compose up -d --build"
+  echo "[失败] Web 容器里没有 /srv/frontend/index.html（镜像不完整或容器未启动）"
 fi
 
 echo ""
@@ -62,4 +66,4 @@ else
 fi
 
 echo ""
-echo "完成。优先对照 §1：若 dist 缺失，网站会空白或无法加载。"
+echo "完成。"

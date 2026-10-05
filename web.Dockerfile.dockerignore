@@ -1,0 +1,7 @@
+# web.Dockerfile 只需要 Caddyfile 和前端源码
+**
+!Caddyfile
+!frontend-vue/**
+frontend-vue/node_modules
+frontend-vue/dist
+frontend-vue/.omc
