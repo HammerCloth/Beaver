@@ -35,13 +35,9 @@ services:
       - "443:443"
     environment:
       CADDY_SITE: ${CADDY_SITE:-:80}
-      # Fanotter 子域名；未设置时为 fanotter.localhost，不影响 Beaver
-      FANOTTER_SITE: ${FANOTTER_SITE:-fanotter.localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./frontend-vue/dist:/srv/frontend:ro
-      # Fanotter 的静态文件，由其仓库的 GitHub Actions 部署到服务器的 /srv/fanotter
-      - /srv/fanotter:/srv/fanotter:ro
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped
